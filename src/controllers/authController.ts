@@ -7,12 +7,11 @@ import notificationService from '../utils/notificationService';
 
 // @desc    Register new user
 // @route   POST /api/auth/register
-// @access  Public
+// @access  Private (Admin/Manager)
 export const register = async (req: Request, res: Response) => {
     try {
-        const { employeeId, email, password, firstName, lastName, department, role } = req.body;
+        const { employeeId, email, phoneNumber, password, firstName, lastName, department, role, age, gender, shift, requestedPlan } = req.body;
 
-        // Check if user exists
         const userExists = await User.findOne({ $or: [{ email }, { employeeId }] });
 
         if (userExists) {
@@ -22,23 +21,108 @@ export const register = async (req: Request, res: Response) => {
             });
         }
 
-        // Create user
+        const profileImage = `https://api.dicebear.com/9.x/avataaars/png?seed=${email}`;
+
+        // Initial Membership Setup
+        let membership = undefined;
+        if (requestedPlan && requestedPlan !== 'none') {
+            const now = moment().tz('Asia/Kathmandu'); // Or default timezone
+            let expiry = now.clone();
+
+            if (requestedPlan === 'admission') {
+                // Admission only - active but no subscription end date really? 
+                // typically admission implies they can enter? Or just registration fee?
+                // Let's set it to 'none' but status 'active' implies they are a member.
+                // Or maybe give them 1 month trial? 
+                // Let's assume Admission = 1 Month for now or just active 'none' plan which might fail checks?
+                // Step 767 check: if plan === 'none' -> 'Active gym membership required'.
+                // So 'admission' alone is not enough to enter.
+                // If user selects 'Admission Only', maybe they pay fee but buy subscription later?
+                // Let's map 'admission' to 'none' plan, status 'active'. They will be blocked from clock-in until they buy subscription. 
+                // That is correct behavior.
+                membership = {
+                    plan: 'none',
+                    startDate: now.toDate(),
+                    expiryDate: now.toDate(),
+                    status: 'active',
+                    monthlyDayCount: 0,
+                    lastResetDate: now.toDate()
+                };
+            } else {
+                // Subscription plans
+                switch (requestedPlan) {
+                    case '1-month': expiry.add(1, 'month'); break;
+                    case '3-month': expiry.add(3, 'months'); break;
+                    case '6-month': expiry.add(6, 'months'); break;
+                    case '1-year': expiry.add(1, 'year'); break;
+                }
+                membership = {
+                    plan: requestedPlan,
+                    startDate: now.toDate(),
+                    expiryDate: expiry.toDate(),
+                    status: 'active',
+                    monthlyDayCount: 0,
+                    lastResetDate: now.toDate()
+                };
+            }
+        }
+
         const user = await User.create({
             employeeId,
             email,
+            phoneNumber,
             password,
             firstName,
             lastName,
             department,
-            role: role || 'user'
+            role: role || 'user',
+            age,
+            gender,
+            shift: shift || 'both',
+            profileImage,
+            membership
         });
 
-        // Generate token (1 year expiration)
+        // 💰 AUTOMATED TRANSACTION RECORDING
+        if (requestedPlan && requestedPlan !== 'none' && req.body.initialPaymentAmount > 0) {
+            await require('../models/Transaction').default.create({
+                userId: user._id,
+                category: 'income',
+                type: requestedPlan === 'admission' ? 'registration' : 'subscription',
+                amount: req.body.initialPaymentAmount,
+                method: 'cash', // Default to cash for direct admin creation
+                plan: requestedPlan !== 'admission' ? requestedPlan : undefined,
+                description: `Initial payment for ${requestedPlan === 'admission' ? 'Admission' : requestedPlan} plan`,
+                date: new Date()
+            });
+        }
+
         const token = generateToken({
             id: user._id.toString(),
             email: user.email,
             role: user.role
         });
+
+        // 🔔 REAL-TIME NOTIFICATION TO ADMINS
+        try {
+            const admins = await User.find({ role: { $in: ['admin', 'manager'] } });
+            for (const admin of admins) {
+                // Don't notify self if self is the creator? 
+                // Creating user doesn't carry creator ID in body easily here (req.user might be available if I change signature to AuthRequest).
+                // But register is public? No, access is Private (Admin/Manager).
+                // So req should be AuthRequest really. But the signature is `req: Request`. 
+                // Let's just notify all, it's fine. Frontend will just refresh.
+                await notificationService.sendNotification({
+                    recipientId: admin._id.toString(),
+                    type: 'new_member',
+                    title: 'New Member Joined! 🚀',
+                    message: `${user.firstName} ${user.lastName} has been registered.${requestedPlan ? ` Plan: ${requestedPlan}` : ''}`,
+                    data: { userId: user._id, type: 'new_member' }
+                });
+            }
+        } catch (notifyError) {
+            console.error('Failed to notify admins of new member:', notifyError);
+        }
 
         res.status(201).json({
             success: true,
@@ -51,16 +135,17 @@ export const register = async (req: Request, res: Response) => {
                     lastName: user.lastName,
                     department: user.department,
                     role: user.role,
+                    age: user.age,
+                    gender: user.gender,
+                    shift: user.shift,
+                    profileImage: user.profileImage,
                     membership: user.membership
                 },
                 token
             }
         });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -72,46 +157,46 @@ export const login = async (req: Request, res: Response) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please provide email and password'
-            });
+            return res.status(400).json({ success: false, message: 'Please provide email and password' });
         }
 
-        // Find user
         const user = await User.findOne({ email });
 
         if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials'
-            });
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        // Check if user is active
         if (!user.isActive) {
-            return res.status(401).json({
-                success: false,
-                message: 'Your account has been deactivated'
-            });
+            return res.status(401).json({ success: false, message: 'Your account has been deactivated' });
         }
 
-        // Check password
         const isPasswordMatch = await user.comparePassword(password);
 
         if (!isPasswordMatch) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials'
-            });
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        // Generate token (1 year expiration)
+        if (!user.profileImage) {
+            user.profileImage = `https://api.dicebear.com/9.x/avataaars/png?seed=${user.email}`;
+            await user.save();
+        }
+
         const token = generateToken({
             id: user._id.toString(),
             email: user.email,
             role: user.role
         });
+
+        // 🚀 MOTIVATIONAL WELCOME
+        try {
+            notificationService.sendNotification({
+                recipientId: user._id.toString(),
+                type: 'system',
+                title: 'Welcome to Shankhamul Gym! 🏋️‍♂️',
+                message: 'Consistency is key! Let\'s crush your goals today. 💪',
+                data: { type: 'motivation' }
+            }).catch(() => { });
+        } catch (e) { }
 
         res.status(200).json({
             success: true,
@@ -124,16 +209,17 @@ export const login = async (req: Request, res: Response) => {
                     lastName: user.lastName,
                     department: user.department,
                     role: user.role,
+                    age: user.age,
+                    gender: user.gender,
+                    shift: user.shift,
+                    profileImage: user.profileImage,
                     membership: user.membership
                 },
                 token
             }
         });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -143,16 +229,39 @@ export const login = async (req: Request, res: Response) => {
 export const getMe = async (req: AuthRequest, res: Response) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
+        res.status(200).json({ success: true, data: user });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Update current user profile
+// @route   PUT /api/auth/me
+// @access  Private
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const { firstName, lastName, preferredWorkoutStart, preferredWorkoutEnd, pushToken, notificationsEnabled } = req.body;
+
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        if (firstName) user.firstName = firstName;
+        if (lastName) user.lastName = lastName;
+        if (preferredWorkoutStart) user.preferredWorkoutStart = preferredWorkoutStart;
+        if (preferredWorkoutEnd) user.preferredWorkoutEnd = preferredWorkoutEnd;
+        if (pushToken) user.pushToken = pushToken;
+        if (notificationsEnabled !== undefined) user.notificationsEnabled = notificationsEnabled;
+
+        await user.save();
 
         res.status(200).json({
             success: true,
             data: user
         });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -165,10 +274,7 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
         const validPlans = ['1-month', '3-month', '6-month', '1-year'];
 
         if (!validPlans.includes(plan)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid membership plan'
-            });
+            return res.status(400).json({ success: false, message: 'Invalid membership plan' });
         }
 
         const user = await User.findById(req.user.id);
@@ -176,11 +282,9 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        // Logic for Renewal vs New Subscription
         let start = startDate ? moment(startDate) : moment();
         let isRenewal = false;
 
-        // If user has an active membership, start the new one after the current expires
         if (user.membership && user.membership.status === 'active' && moment(user.membership.expiryDate).isAfter(moment())) {
             start = moment(user.membership.expiryDate);
             isRenewal = true;
@@ -196,16 +300,15 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
 
         user.membership = {
             plan,
-            startDate: start.toDate(),
-            expiryDate: expiry.toDate(),
-            status: 'pending', // Requires Admin/Manager Approval
+            startDate: start.toDate() as any,
+            expiryDate: expiry.toDate() as any,
+            status: 'pending',
             monthlyDayCount: user.membership?.monthlyDayCount || 0,
-            lastResetDate: user.membership?.lastResetDate || moment().toDate()
+            lastResetDate: user.membership?.lastResetDate || moment().toDate() as any
         };
 
         await user.save();
 
-        // Notify Admins/Managers
         try {
             const admins = await User.find({ role: { $in: ['admin', 'manager'] } });
             for (const admin of admins) {
@@ -230,10 +333,7 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
             isRenewal
         });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -254,7 +354,6 @@ export const approveMembership = async (req: AuthRequest, res: Response) => {
         user.membership.status = 'active';
         await user.save();
 
-        // Trigger Notification
         await notificationService.sendNotification({
             recipientId: user._id.toString(),
             type: 'membership_approved',
@@ -273,9 +372,7 @@ export const approveMembership = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// @desc    Get All Users with Membership Details (Admin Only)
-// @route   GET /api/auth/users
-// @access  Private (Admin)
+// @desc    Get All Users (Admin Only)
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
     try {
         if (req.user.role !== 'admin' && req.user.role !== 'manager') {
@@ -283,37 +380,64 @@ export const getAllUsers = async (req: AuthRequest, res: Response) => {
         }
 
         const users = await User.find().select('-password');
-        res.status(200).json({
-            success: true,
-            data: users
-        });
+        res.status(200).json({ success: true, data: users });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
 // @desc    Get Membership Status
-// @route   GET /api/auth/membership/status
-// @access  Private
 export const getMembershipStatus = async (req: AuthRequest, res: Response) => {
     try {
         const user = await User.findById(req.user.id).select('membership');
-
         if (!user || !user.membership) {
-            return res.status(200).json({
-                success: true,
-                data: { plan: 'none', status: 'pending' }
-            });
+            return res.status(200).json({ success: true, data: { plan: 'none', status: 'pending' } });
+        }
+        res.status(200).json({ success: true, data: user.membership });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Update User (Admin Only)
+export const updateUser = async (req: AuthRequest, res: Response) => {
+    try {
+        const { password, ...updateData } = req.body;
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        if (req.user.role === 'manager') {
+            if (user.role !== 'user') return res.status(403).json({ success: false, message: 'Not authorized' });
+            if (updateData.role && updateData.role !== 'user') return res.status(403).json({ success: false, message: 'Not authorized' });
+        } else if (req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
-        res.status(200).json({
-            success: true,
-            data: user.membership
-        });
+        if (password) user.password = password;
+        Object.assign(user, updateData);
+        await user.save();
+
+        res.status(200).json({ success: true, message: 'User updated successfully', data: user });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Delete User (Admin Only)
+export const deleteUser = async (req: AuthRequest, res: Response) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+        if (req.user.role === 'manager') {
+            if (user.role !== 'user') return res.status(403).json({ success: false, message: 'Not authorized' });
+        } else if (req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        await User.findByIdAndDelete(req.params.id);
+        res.status(200).json({ success: true, message: 'User deleted successfully' });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
     }
 };

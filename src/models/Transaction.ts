@@ -1,8 +1,9 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ITransaction extends Document {
-    userId: mongoose.Types.ObjectId;
-    type: 'subscription' | 'registration' | 'other';
+    userId?: mongoose.Types.ObjectId;
+    category: 'income' | 'expense';
+    type: 'subscription' | 'registration' | 'salary' | 'rent' | 'electricity' | 'maintenance' | 'other';
     amount: number;
     method: 'cash' | 'online';
     plan?: string;
@@ -16,11 +17,17 @@ const TransactionSchema = new Schema<ITransaction>({
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: false
+    },
+    category: {
+        type: String,
+        enum: ['income', 'expense'],
+        required: true,
+        default: 'income'
     },
     type: {
         type: String,
-        enum: ['subscription', 'registration', 'other'],
+        enum: ['subscription', 'registration', 'salary', 'rent', 'electricity', 'maintenance', 'other'],
         required: true
     },
     amount: {

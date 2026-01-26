@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import Notification from '../models/Notification';
 import User from '../models/User';
 import logger from './logger';
+import firebaseService from './firebaseService';
 
 class NotificationService {
     private io: Server | null = null;
@@ -34,7 +35,7 @@ class NotificationService {
 
     async sendNotification(params: {
         recipientId: string;
-        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder';
+        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
         title: string;
         message: string;
         data?: any;
@@ -71,12 +72,15 @@ class NotificationService {
                 }
             }
 
-            // 3. (Optional Architecture) Trigger Actual Push Notification
-            // If user has a pushToken, you would call FCM/OneSignal here
+            // 3. Trigger Actual Push Notification
             const user = await User.findById(recipientId).select('pushToken notificationsEnabled');
             if (user?.pushToken && user.notificationsEnabled) {
-                // TODO: Call FCM Service
-                // logger.info(`Actual Push Notification would be sent to token: ${user.pushToken}`);
+                await firebaseService.sendPushNotification(
+                    user.pushToken,
+                    title,
+                    message,
+                    data
+                );
             }
 
             return notification;

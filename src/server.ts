@@ -9,11 +9,13 @@ import morgan from 'morgan';
 import connectDB from './config/database';
 import logger from './utils/logger';
 import notificationService from './utils/notificationService';
+import firebaseService from './utils/firebaseService';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
 import attendanceRoutes from './routes/attendanceRoutes';
 import financeRoutes from './routes/financeRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -32,6 +34,11 @@ const io = new Server(httpServer, {
 
 // Initialize Notification Service
 notificationService.init(io);
+firebaseService.init();
+
+// Initialize Scheduler Service (Expiry & Inactivity Notifications)
+import schedulerService from './utils/schedulerService';
+schedulerService.init();
 
 // Connect to database
 connectDB();
@@ -68,12 +75,17 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/finance', financeRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check route
+import mongoose from 'mongoose';
+
 app.get('/health', (req: Request, res: Response) => {
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
     res.status(200).json({
         success: true,
         message: 'Server is healthy',
+        database: dbStatus,
         timestamp: new Date().toISOString()
     });
 });
@@ -113,6 +125,6 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 const PORT = process.env.PORT || 5000;
 
 httpServer.listen(PORT, () => {
-    logger.info(`🚀 Server running on port ${PORT}`);
-    logger.info(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(` Server running on port ${PORT}`);
+    logger.info(` Environment: ${process.env.NODE_ENV || 'development'}`);
 });

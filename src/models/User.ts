@@ -4,12 +4,15 @@ import bcrypt from 'bcryptjs';
 export interface IUser extends Document {
     employeeId: string;
     email: string;
+    phoneNumber?: string;
     password: string;
     firstName: string;
     lastName: string;
     department: string;
     role: 'admin' | 'manager' | 'user';
     isActive: boolean;
+    age?: number;
+    gender?: 'male' | 'female' | 'other';
     profileImage?: string;
     membership?: {
         plan: '1-month' | '3-month' | '6-month' | '1-year' | 'none';
@@ -19,12 +22,15 @@ export interface IUser extends Document {
         monthlyDayCount: number; // For the 26-day rule tracking
         lastResetDate: Date;      // To track when the 26-day count was last reset (monthly)
     };
+    shift?: 'morning' | 'evening' | 'both';
     createdAt: Date;
     updatedAt: Date;
     pushToken?: string;
     notificationsEnabled: boolean;
     salary?: number;
     paymentFrequency?: 'monthly' | 'bimonthly' | 'weekly';
+    preferredWorkoutStart?: string; // e.g. "18:30"
+    preferredWorkoutEnd?: string;   // e.g. "20:00"
     comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -41,6 +47,11 @@ const UserSchema = new Schema<IUser>({
         unique: true,
         lowercase: true,
         trim: true
+    },
+    phoneNumber: {
+        type: String,
+        trim: true,
+        default: ''
     },
     password: {
         type: String,
@@ -71,6 +82,14 @@ const UserSchema = new Schema<IUser>({
     isActive: {
         type: Boolean,
         default: true
+    },
+    age: {
+        type: Number,
+        min: 0
+    },
+    gender: {
+        type: String,
+        enum: ['male', 'female', 'other']
     },
     profileImage: {
         type: String
@@ -113,6 +132,19 @@ const UserSchema = new Schema<IUser>({
         type: String,
         enum: ['monthly', 'bimonthly', 'weekly'],
         default: 'monthly'
+    },
+    shift: {
+        type: String,
+        enum: ['morning', 'evening', 'both'],
+        default: 'both'
+    },
+    preferredWorkoutStart: {
+        type: String,
+        default: '06:00'
+    },
+    preferredWorkoutEnd: {
+        type: String,
+        default: '08:00'
     }
 }, {
     timestamps: true

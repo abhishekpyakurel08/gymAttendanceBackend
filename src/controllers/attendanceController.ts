@@ -4,10 +4,42 @@ import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
 import moment from 'moment-timezone';
 import notificationService from '../utils/notificationService';
+import mongoose from 'mongoose';
 
 const OFFICE_START_TIME = process.env.OFFICE_START_TIME || '09:00';
 const LATE_THRESHOLD = parseInt(process.env.LATE_THRESHOLD_MINUTES || '15');
 const TIMEZONE = process.env.DEFAULT_TIMEZONE || 'Asia/Kathmandu';
+
+// 📍 Shankhamul Gym Location (Kathmandu, Nepal)
+const GYM_LATITUDE = 27.684185017430245;
+const GYM_LONGITUDE = 85.33338702577204;
+const GYM_RADIUS_METERS = 100; // 100 meter radius
+
+/**
+ * Calculate distance between two GPS coordinates using Haversine formula
+ * Returns distance in meters
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+}
+
+/**
+ * Validate if coordinates are within gym geo-fence
+ */
+function isWithinGymBoundary(latitude: number, longitude: number): boolean {
+    const distance = calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude);
+    return distance <= GYM_RADIUS_METERS;
+}
 
 // @desc    Clock in
 // @route   POST /api/attendance/clock-in
@@ -23,15 +55,48 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        // 🔒 GEO-FENCE VALIDATION
+        if (!isWithinGymBoundary(latitude, longitude)) {
+            const distance = Math.round(calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude));
+            return res.status(403).json({
+                success: false,
+                message: `You must be at the gym to check in. You are ${distance}m away from gym location.`
+            });
+        }
+
         const user = await User.findById(req.user.id);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
+        // --- Gym Operating Hours Validation ---
+        const now = moment().tz(TIMEZONE);
+        const dayOfWeek = now.day(); // 0 (Sun) to 6 (Sat)
+        const hour = now.hour();
+
+        // 1. Check if Saturday (Closed)
+        if (dayOfWeek === 6) {
+            return res.status(403).json({
+                success: false,
+                message: 'Gym is closed on Saturdays.'
+            });
+        }
+
+        // 2. Check Operating Hours (05:00 - 20:00)
+        // Adjust these variables as needed or move to env vars
+        const OPEN_HOUR = 5;
+        const CLOSE_HOUR = 20;
+
+        if (hour < OPEN_HOUR || hour >= CLOSE_HOUR) {
+            return res.status(403).json({
+                success: false,
+                message: `Gym is closed. Operating hours are ${OPEN_HOUR}:00 to ${CLOSE_HOUR}:00.`
+            });
+        }
+
         // --- Membership & 26-Day Rule Validation ---
 
         // Reset monthly count if it's a new month
-        const now = moment().tz(TIMEZONE);
         const lastReset = moment(user.membership?.lastResetDate).tz(TIMEZONE);
 
         if (now.month() !== lastReset.month() || now.year() !== lastReset.year()) {
@@ -176,6 +241,15 @@ export const clockOut = async (req: AuthRequest, res: Response) => {
             });
         }
 
+        // 🔒 GEO-FENCE VALIDATION (Clock-out must also be at gym)
+        if (latitude && longitude && !isWithinGymBoundary(latitude, longitude)) {
+            const distance = Math.round(calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude));
+            return res.status(403).json({
+                success: false,
+                message: `You must be at the gym to check out. You are ${distance}m away from gym location.`
+            });
+        }
+
         // Update with clock out info
         attendance.clockOut = now.toDate();
         attendance.clockOutLocation = {
@@ -281,7 +355,7 @@ export const getStats = async (req: AuthRequest, res: Response) => {
     try {
         const { startDate, endDate } = req.query;
 
-        const matchQuery: any = { userId: req.user.id };
+        const matchQuery: any = { userId: new mongoose.Types.ObjectId(req.user.id) };
 
         if (startDate || endDate) {
             matchQuery.date = {};
@@ -312,11 +386,17 @@ export const getStats = async (req: AuthRequest, res: Response) => {
 
         const total = await Attendance.countDocuments(matchQuery);
 
+        // Sum of on-time, late, and half-day for total present
+        const totalPresent = formattedStats['on-time'] + formattedStats['late'] + formattedStats['half-day'];
+
         res.status(200).json({
             success: true,
             data: {
-                ...formattedStats,
-                total
+                totalPresent,
+                totalOnTime: formattedStats['on-time'],
+                totalLate: formattedStats['late'],
+                totalAbsent: formattedStats['absent'],
+                totalRecords: total
             }
         });
     } catch (error: any) {

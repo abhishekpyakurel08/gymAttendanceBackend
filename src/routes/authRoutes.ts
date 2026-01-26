@@ -1,12 +1,13 @@
 import express from 'express';
-import { register, login, getMe, updateMembership, getMembershipStatus, approveMembership, getAllUsers } from '../controllers/authController';
+import { register, login, getMe, updateProfile, updateMembership, getMembershipStatus, approveMembership, getAllUsers, updateUser, deleteUser } from '../controllers/authController';
 import { protect } from '../middleware/auth';
 
 const router = express.Router();
 
-router.post('/register', register);
+router.post('/register', protect, register);
 router.post('/login', login);
 router.get('/me', protect, getMe);
+router.put('/me', protect, updateProfile);
 
 // Membership routes
 router.put('/membership', protect, updateMembership);
@@ -21,5 +22,7 @@ router.put('/update-push-token', protect, (req: any, res) => {
 // Admin routes
 router.put('/membership/approve/:userId', protect, approveMembership);
 router.get('/users', protect, getAllUsers);
+router.put('/users/:id', protect, updateUser);
+router.delete('/users/:id', protect, deleteUser);
 
 export default router;
