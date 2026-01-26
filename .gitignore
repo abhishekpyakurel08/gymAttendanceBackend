@@ -6,3 +6,8 @@ dist/
 coverage/
 .vscode/
 .idea/
+
+Dockerfile/
+API_TESTING.md/
+JWT_CONFIG.md/
+QUICKSTART.md/

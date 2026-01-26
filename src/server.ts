@@ -72,6 +72,9 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // Routes
+app.get("/health",(req:Request,res:Response) => {
+    res.send("API IS WORKING")
+})
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/finance', financeRoutes);
