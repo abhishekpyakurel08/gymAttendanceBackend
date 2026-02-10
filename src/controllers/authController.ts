@@ -176,6 +176,18 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
+        // Gym-pass validity check
+        if (!user.membership || user.membership.plan === 'none') {
+            return res.status(401).json({ success: false, message: 'No active gym-pass. Please purchase a membership.' });
+        }
+        const now = new Date();
+        if (user.membership.expiryDate && user.membership.expiryDate < now) {
+            return res.status(401).json({ success: false, message: 'Your gym-pass has expired. Please renew your membership.' });
+        }
+        if (user.membership.status === 'expired') {
+            return res.status(401).json({ success: false, message: 'Your gym-pass is expired. Please renew your membership.' });
+        }
+
         if (!user.profileImage) {
             user.profileImage = `https://api.dicebear.com/9.x/avataaars/png?seed=${user.email}`;
             await user.save();
