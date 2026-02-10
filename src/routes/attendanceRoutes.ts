@@ -20,6 +20,7 @@ router.get('/stats', protect, getStats);
 
 // Admin routes
 router.get('/admin/today', protect, getTodayAttendanceAll);
+router.get('/admin/absent', protect, getAbsentMembersToday);
 router.get('/admin/history/:userId', protect, getMemberHistory);
 
 export default router;

@@ -84,6 +84,74 @@ const seedUsers = async () => {
             console.log('ℹ️ Demo user already exists (Email or ID match)');
         }
 
+        // 4. Create Receptionist (as manager role to allow admin-like access)
+        const recEmail = 'receptionist@gmail.com';
+        const recEmpId = 'REC-001';
+        await User.deleteOne({ $or: [{ email: recEmail }, { employeeId: recEmpId }] });
+        await User.create({
+            employeeId: recEmpId,
+            email: recEmail,
+            password: 'password123',
+            firstName: 'Rita',
+            lastName: 'Reception',
+            department: 'Operations',
+            role: 'manager',
+            isActive: true,
+            profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${recEmail}`,
+            shift: 'morning'
+        });
+        console.log('✅ Receptionist created: receptionist@gmail.com / password123');
+
+        // 5. Create additional member - 3 month active
+        const memberAEmail = 'memberA@gmail.com';
+        const memberAEmpId = 'USR-002';
+        await User.deleteOne({ $or: [{ email: memberAEmail }, { employeeId: memberAEmpId }] });
+        await User.create({
+            employeeId: memberAEmpId,
+            email: memberAEmail,
+            password: 'password123',
+            firstName: 'Alice',
+            lastName: 'Member',
+            department: 'Operations',
+            role: 'user',
+            isActive: true,
+            profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${memberAEmail}`,
+            membership: {
+                plan: '3-month',
+                startDate: new Date(),
+                expiryDate: new Date(new Date().setMonth(new Date().getMonth() + 3)),
+                status: 'active',
+                monthlyDayCount: 0,
+                lastResetDate: new Date()
+            }
+        });
+        console.log('✅ Member A created: memberA@gmail.com / password123');
+
+        // 6. Create expired member
+        const memberBEmail = 'memberB@gmail.com';
+        const memberBEmpId = 'USR-003';
+        await User.deleteOne({ $or: [{ email: memberBEmail }, { employeeId: memberBEmpId }] });
+        await User.create({
+            employeeId: memberBEmpId,
+            email: memberBEmail,
+            password: 'password123',
+            firstName: 'Bob',
+            lastName: 'Expired',
+            department: 'Operations',
+            role: 'user',
+            isActive: true,
+            profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${memberBEmail}`,
+            membership: {
+                plan: '1-month',
+                startDate: new Date(new Date().setMonth(new Date().getMonth() - 2)),
+                expiryDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+                status: 'expired',
+                monthlyDayCount: 0,
+                lastResetDate: new Date()
+            }
+        });
+        console.log('✅ Expired member created: memberB@gmail.com / password123');
+
         process.exit(0);
     } catch (error) {
         console.error('❌ Seeding failed:', error);

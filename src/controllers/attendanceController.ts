@@ -1,3 +1,45 @@
+import moment from 'moment-timezone';
+import Attendance from '../models/Attendance';
+// @desc    Get absent members for today
+// @route   GET /api/attendance/admin/absent
+// @access  Admin/Manager
+export const getAbsentMembersToday = async (req: AuthRequest, res: Response) => {
+    try {
+        const today = moment().startOf('day');
+        const tomorrow = moment(today).add(1, 'day');
+
+        // Get all active users with role 'user'
+        const allMembers = await User.find({ role: 'user', isActive: true });
+        const allMemberIds = allMembers.map(u => u._id.toString());
+
+        // Get all attendance records for today
+        const attendanceToday = await Attendance.find({
+            userId: { $in: allMemberIds },
+            date: { $gte: today.toDate(), $lt: tomorrow.toDate() }
+        });
+        const presentIds = new Set(attendanceToday.map(a => a.userId.toString()));
+
+        // Filter members who are not present
+        const absentMembers = allMembers.filter(u => !presentIds.has(u._id.toString()));
+
+        res.status(200).json({
+            success: true,
+            count: absentMembers.length,
+            absent: absentMembers.map(u => ({
+                id: u._id,
+                employeeId: u.employeeId,
+                email: u.email,
+                firstName: u.firstName,
+                lastName: u.lastName,
+                department: u.department,
+                profileImage: u.profileImage,
+                membership: u.membership
+            }))
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
 import { Response } from 'express';
 import Attendance from '../models/Attendance';
 import User from '../models/User';
