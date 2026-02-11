@@ -17,6 +17,11 @@ import attendanceRoutes from './routes/attendanceRoutes';
 import financeRoutes from './routes/financeRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import adminRoutes from './routes/adminRoutes';
+import staffRoutes from './routes/staffRoutes';
+import workoutRoutes from './routes/workoutRoutes';
+import reportRoutes from './routes/reportRoutes';
+import dashboardRoutes from './routes/dashboardRoutes';
+import measurementRoutes from './routes/measurementRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -73,7 +78,7 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // Routes
-app.get("/health",(req:Request,res:Response) => {
+app.get("/health", (req: Request, res: Response) => {
     res.send("API IS WORKING")
 })
 app.use('/api/auth', authRoutes);
@@ -81,6 +86,11 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/workouts', workoutRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/measurements', measurementRoutes);
 
 // Health check route
 import mongoose from 'mongoose';

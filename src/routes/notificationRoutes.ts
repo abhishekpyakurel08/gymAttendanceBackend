@@ -4,9 +4,12 @@ import {
     markAsRead,
     markAllAsRead,
     deleteNotification,
-    sendTargetedNotification
+    sendTargetedNotification,
+    broadcastNotification,
+    sendToSelectedMembers
 } from '../controllers/notificationController';
-import { protect } from '../middleware/auth';
+import { protect, authorize } from '../middleware/auth';
+
 
 const router = express.Router();
 
@@ -22,6 +25,12 @@ router.route('/:id')
     .delete(deleteNotification);
 
 router.put('/:id/read', markAsRead);
-router.post('/targeted', sendTargetedNotification);
+
+// Admin Only Routes
+router.post('/targeted', authorize('admin', 'manager'), sendTargetedNotification);
+router.post('/broadcast', authorize('admin', 'manager'), broadcastNotification);
+router.post('/selected', authorize('admin', 'manager'), sendToSelectedMembers);
 
 export default router;
+
+

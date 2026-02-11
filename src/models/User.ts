@@ -71,7 +71,7 @@ const UserSchema = new Schema<IUser>({
     department: {
         type: String,
         required: true,
-        enum: ['Management', 'Engineering', 'Sales', 'HR', 'Marketing', 'Operations'],
+        enum: ['Management', 'Trainer', 'Reception', 'Sales', 'Cleaning', 'Security', 'Operations'],
         default: 'Operations'
     },
     role: {

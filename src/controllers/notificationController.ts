@@ -148,7 +148,7 @@ export const sendTargetedNotification = async (req: AuthRequest, res: Response) 
             return res.status(403).json({ success: false, message: 'Not authorized for group messaging' });
         }
 
-        const { title, message, gender, minAge, maxAge, type = 'announcement' } = req.body;
+        const { title, message, gender, minAge, maxAge, data, type = 'announcement' } = req.body;
 
         if (!title || !message) {
             return res.status(400).json({ success: false, message: 'Title and message are required' });
@@ -170,22 +170,98 @@ export const sendTargetedNotification = async (req: AuthRequest, res: Response) 
             return res.status(404).json({ success: false, message: 'No users found matching these criteria' });
         }
 
-        // Send notifications using the service (async)
-        const sendPromises = users.map(user =>
-            notificationService.sendNotification({
-                recipientId: user._id.toString(),
-                type,
-                title,
-                message,
-                data: { sentBy: req.user.id }
-            })
-        );
+        const userIds = users.map(u => u._id.toString());
 
-        await Promise.all(sendPromises);
+        const result = await notificationService.sendMultipleNotifications({
+            userIds,
+            type,
+            title,
+            message,
+            senderId: req.user.id,
+            data
+        });
 
         res.status(200).json({
             success: true,
-            message: `Notification sent to ${users.length} users successfully`
+            message: `Notification sent to ${result.count} users successfully`
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Broadcast notification to all users
+ * @route   POST /api/notifications/broadcast
+ * @access  Private (Admin)
+ */
+export const broadcastNotification = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Not authorized for global messaging' });
+        }
+
+        const { title, message, data } = req.body;
+
+        if (!title || !message) {
+            return res.status(400).json({ success: false, message: 'Title and message are required' });
+        }
+
+        const result = await notificationService.broadcastNotification({
+            title,
+            message,
+            senderId: req.user.id,
+            data
+        });
+
+        if (result.success) {
+            res.status(200).json({
+                success: true,
+                message: `Broadcast sent to ${result.count} users`
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: result.error
+            });
+        }
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+/**
+ * @desc    Send notification to selected users
+ * @route   POST /api/notifications/selected
+ * @access  Private (Admin)
+ */
+export const sendToSelectedMembers = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const { userIds, title, message, data, type = 'system' } = req.body;
+
+        if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ success: false, message: 'Please provide an array of user IDs' });
+        }
+
+        if (!title || !message) {
+            return res.status(400).json({ success: false, message: 'Title and message are required' });
+        }
+
+        const result = await notificationService.sendMultipleNotifications({
+            userIds,
+            type,
+            title,
+            message,
+            senderId: req.user.id,
+            data
+        });
+
+        res.status(200).json({
+            success: true,
+            message: `Notification sent to ${result.count} selected users`
         });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });

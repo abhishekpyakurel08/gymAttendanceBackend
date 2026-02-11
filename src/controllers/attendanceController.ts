@@ -1,5 +1,12 @@
+import { Response } from 'express';
 import moment from 'moment-timezone';
 import Attendance from '../models/Attendance';
+import User from '../models/User';
+import { AuthRequest } from '../middleware/auth';
+import notificationService from '../utils/notificationService';
+import mongoose from 'mongoose';
+import logger from '../utils/logger';
+
 // @desc    Get absent members for today
 // @route   GET /api/attendance/admin/absent
 // @access  Admin/Manager
@@ -40,15 +47,10 @@ export const getAbsentMembersToday = async (req: AuthRequest, res: Response) => 
         res.status(500).json({ success: false, message: error.message });
     }
 };
-import { Response } from 'express';
-import Attendance from '../models/Attendance';
-import User from '../models/User';
-import { AuthRequest } from '../middleware/auth';
-import moment from 'moment-timezone';
-import notificationService from '../utils/notificationService';
-import mongoose from 'mongoose';
 
 const OFFICE_START_TIME = process.env.OFFICE_START_TIME || '09:00';
+
+
 const LATE_THRESHOLD = parseInt(process.env.LATE_THRESHOLD_MINUTES || '15');
 const TIMEZONE = process.env.DEFAULT_TIMEZONE || 'Asia/Kathmandu';
 
@@ -240,6 +242,16 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
             data: { attendanceId: attendance._id }
         });
 
+        // 🟢 REAL-TIME MONITOR FOR ADMIN
+        notificationService.sendAdminNotification('user_clock_in', {
+            attendanceId: attendance._id,
+            userId: user._id,
+            userName: `${user.firstName} ${user.lastName}`,
+            profileImage: user.profileImage,
+            time: now.format('HH:mm:ss'),
+            status: status
+        });
+
         res.status(201).json({
             success: true,
             data: attendance,
@@ -309,6 +321,13 @@ export const clockOut = async (req: AuthRequest, res: Response) => {
             title: 'Workout Finished! 🏁',
             message: `Well done! You clocked out at ${now.format('LT')}. See you next time!`,
             data: { attendanceId: attendance._id }
+        });
+
+        // 🔴 REAL-TIME MONITOR FOR ADMIN
+        notificationService.sendAdminNotification('user_clock_out', {
+            attendanceId: attendance._id,
+            userId: req.user.id,
+            time: now.format('HH:mm:ss'),
         });
 
         res.status(200).json({

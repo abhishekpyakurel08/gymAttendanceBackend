@@ -1,12 +1,18 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import Transaction from '../models/Transaction';
 import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
 import moment from 'moment-timezone';
 import mongoose from 'mongoose';
+import logger from '../utils/logger';
 
 const TIMEZONE = 'Asia/Kathmandu';
 
+/**
+ * @desc    Get financial dashboard stats (Today)
+ * @route   GET /api/finance/stats/daily
+ * @access  Private (Admin only)
+ */
 export const getDailyStats = async (req: AuthRequest, res: Response) => {
     try {
         if (req.user.role !== 'admin' && req.user.role !== 'manager') {
@@ -19,43 +25,119 @@ export const getDailyStats = async (req: AuthRequest, res: Response) => {
         const stats = await Transaction.aggregate([
             {
                 $match: {
-                    date: { $gte: startOfDay, $lte: endOfDay },
-                    category: 'income'
+                    date: { $gte: startOfDay, $lte: endOfDay }
                 }
             },
             {
                 $group: {
-                    _id: null,
-                    totalRevenue: { $sum: '$amount' }
+                    _id: '$category',
+                    total: { $sum: '$amount' }
                 }
             }
         ]);
 
+        const summary = {
+            income: 0,
+            expense: 0,
+            net: 0
+        };
+
+        stats.forEach(s => {
+            if (s._id === 'income') summary.income = s.total;
+            if (s._id === 'expense') summary.expense = s.total;
+        });
+
+        summary.net = summary.income - summary.expense;
+
         res.status(200).json({
             success: true,
-            data: {
-                revenue: stats[0]?.totalRevenue || 0
+            data: summary
+        });
+    } catch (error: any) {
+        logger.error(`Error in getDailyStats: ${error.message}`);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Get monthly financial stats for charts
+ * @route   GET /api/finance/stats/monthly
+ * @access  Private (Admin only)
+ */
+export const getMonthlyStats = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const startOfMonth = moment().tz(TIMEZONE).startOf('month').toDate();
+        const endOfMonth = moment().tz(TIMEZONE).endOf('month').toDate();
+
+        // Daily breakdown for the current month
+        const dailyStats = await Transaction.aggregate([
+            {
+                $match: {
+                    date: { $gte: startOfMonth, $lte: endOfMonth }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        day: { $dayOfMonth: '$date' },
+                        category: '$category'
+                    },
+                    amount: { $sum: '$amount' }
+                }
+            },
+            { $sort: { '_id.day': 1 } }
+        ]);
+
+        // Process for frontend charts (e.g. [ { day: 1, income: 100, expense: 50 }, ... ])
+        const chartData: any[] = [];
+        const daysInMonth = moment().daysInMonth();
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            chartData.push({ day: i, income: 0, expense: 0 });
+        }
+
+        dailyStats.forEach(stat => {
+            const index = stat._id.day - 1;
+            if (chartData[index]) {
+                if (stat._id.category === 'income') chartData[index].income = stat.amount;
+                else chartData[index].expense = stat.amount;
             }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: chartData
         });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// @desc    Get all transactions
-// @route   GET /api/finance/transactions
-// @access  Private (Admin only)
+/**
+ * @desc    Get all transactions with filtering
+ * @route   GET /api/finance/transactions
+ * @access  Private (Admin only)
+ */
 export const getTransactions = async (req: AuthRequest, res: Response) => {
     try {
         if (req.user.role !== 'admin' && req.user.role !== 'manager') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
-        const { userId } = req.query;
+        const { userId, category, type, startDate, endDate } = req.query;
         const query: any = {};
 
-        if (userId) {
-            query.userId = userId;
+        if (userId) query.userId = userId;
+        if (category) query.category = category;
+        if (type) query.type = type;
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate as string);
+            if (endDate) query.date.$lte = new Date(endDate as string);
         }
 
         const transactions = await Transaction.find(query)
@@ -80,23 +162,22 @@ export const getTransactions = async (req: AuthRequest, res: Response) => {
             data
         });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// @desc    Add a new transaction
-// @route   POST /api/finance/transactions/add
-// @access  Private (Admin only)
+/**
+ * @desc    Add a new transaction (Income/Expense)
+ * @route   POST /api/finance/transactions/add
+ * @access  Private (Admin only)
+ */
 export const addTransaction = async (req: AuthRequest, res: Response) => {
     try {
         if (req.user.role !== 'admin' && req.user.role !== 'manager') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
-        const { userId, category, type, amount, method, plan, description } = req.body;
+        const { userId, category, type, amount, method, plan, description, date } = req.body;
 
         if (userId) {
             const user = await User.findById(userId);
@@ -113,14 +194,14 @@ export const addTransaction = async (req: AuthRequest, res: Response) => {
             method,
             plan,
             description,
-            date: new Date()
+            date: date ? new Date(date) : new Date()
         });
 
-        // 🔄 AUTOMATIC MEMBERSHIP UPDATE LOGIC
+        // 🔄 AUTOMATIC MEMBERSHIP UPDATE LOGIC (FOR INCOME)
         if (userId && (type === 'subscription' || type === 'registration') && category === 'income') {
             const user = await User.findById(userId);
             if (user) {
-                const now = moment();
+                const now = moment().tz(TIMEZONE);
 
                 // If confirming a subscription payment
                 if (type === 'subscription' && plan) {
@@ -155,7 +236,7 @@ export const addTransaction = async (req: AuthRequest, res: Response) => {
                 }
 
                 // If admission fee (registration), ensure status is at least pending/active or initialized
-                if (type === 'registration' && (!user.membership || !user.membership.status)) {
+                if (type === 'registration' && (!user.membership || user.membership.plan === 'none')) {
                     user.membership = {
                         plan: 'none',
                         startDate: now.toDate() as any,
@@ -174,9 +255,7 @@ export const addTransaction = async (req: AuthRequest, res: Response) => {
             data: transaction
         });
     } catch (error: any) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
+
