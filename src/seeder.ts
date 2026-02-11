@@ -84,7 +84,41 @@ const seedUsers = async () => {
             console.log('ℹ️ Demo user already exists (Email or ID match)');
         }
 
-        // 4. Create Receptionist (as manager role to allow admin-like access)
+        // 4. Create Owner (Admin)
+        const ownerEmail = 'owner@gmail.com';
+        const ownerEmpId = 'ADMIN-002';
+        await User.deleteOne({ $or: [{ email: ownerEmail }, { employeeId: ownerEmpId }] });
+        await User.create({
+            employeeId: ownerEmpId,
+            email: ownerEmail,
+            password: 'password123',
+            firstName: 'Ram',
+            lastName: 'Owner',
+            department: 'Management',
+            role: 'admin',
+            isActive: true,
+            profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${ownerEmail}`
+        });
+        console.log('✅ Owner Admin created: owner@gmail.com / password123');
+
+        // 5. Create Trainer (Manager)
+        const trainerEmail = 'trainer@gmail.com';
+        const trainerEmpId = 'MGR-002';
+        await User.deleteOne({ $or: [{ email: trainerEmail }, { employeeId: trainerEmpId }] });
+        await User.create({
+            employeeId: trainerEmpId,
+            email: trainerEmail,
+            password: 'password123',
+            firstName: 'Bhola',
+            lastName: 'Trainer',
+            department: 'Operations',
+            role: 'manager',
+            isActive: true,
+            profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${trainerEmail}`
+        });
+        console.log('✅ Trainer Manager created: trainer@gmail.com / password123');
+
+        // 6. Create Receptionist (Manager)
         const recEmail = 'receptionist@gmail.com';
         const recEmpId = 'REC-001';
         await User.deleteOne({ $or: [{ email: recEmail }, { employeeId: recEmpId }] });
@@ -102,7 +136,7 @@ const seedUsers = async () => {
         });
         console.log('✅ Receptionist created: receptionist@gmail.com / password123');
 
-        // 5. Create additional member - 3 month active
+        // 7. Create Member A - 3 month active
         const memberAEmail = 'memberA@gmail.com';
         const memberAEmpId = 'USR-002';
         await User.deleteOne({ $or: [{ email: memberAEmail }, { employeeId: memberAEmpId }] });
@@ -127,7 +161,7 @@ const seedUsers = async () => {
         });
         console.log('✅ Member A created: memberA@gmail.com / password123');
 
-        // 6. Create expired member
+        // 8. Create Expired Member
         const memberBEmail = 'memberB@gmail.com';
         const memberBEmpId = 'USR-003';
         await User.deleteOne({ $or: [{ email: memberBEmail }, { employeeId: memberBEmpId }] });
@@ -151,6 +185,31 @@ const seedUsers = async () => {
             }
         });
         console.log('✅ Expired member created: memberB@gmail.com / password123');
+
+        // 9. Create Pending Member (Just registered via admission)
+        const pendingEmail = 'pending@gmail.com';
+        const pendingEmpId = 'USR-004';
+        await User.deleteOne({ $or: [{ email: pendingEmail }, { employeeId: pendingEmpId }] });
+        await User.create({
+            employeeId: pendingEmpId,
+            email: pendingEmail,
+            password: 'password123',
+            firstName: 'Prashant',
+            lastName: 'Wait',
+            department: 'Engineering',
+            role: 'user',
+            isActive: true,
+            profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${pendingEmail}`,
+            membership: {
+                plan: 'none',
+                startDate: new Date(),
+                expiryDate: new Date(),
+                status: 'pending',
+                monthlyDayCount: 0,
+                lastResetDate: new Date()
+            }
+        });
+        console.log('✅ Pending member created: pending@gmail.com / password123');
 
         process.exit(0);
     } catch (error) {
