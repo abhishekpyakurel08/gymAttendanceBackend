@@ -235,6 +235,120 @@ export const login = async (req: Request, res: Response) => {
     }
 };
 
+// @desc    Login admin/manager
+// @route   POST /api/auth/admin/login
+// @access  Public
+export const adminLogin = async (req: Request, res: Response) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Please provide email and password' });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+
+        // Check if user is admin or manager
+        if (user.role !== 'admin' && user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Access denied. Only admins and managers can login here.' });
+        }
+
+        if (!user.isActive) {
+            return res.status(401).json({ success: false, message: 'Your account has been deactivated' });
+        }
+
+        const isPasswordMatch = await user.comparePassword(password);
+
+        if (!isPasswordMatch) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+
+        const token = generateToken({
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                user: {
+                    id: user._id,
+                    employeeId: user.employeeId,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: user.role,
+                    profileImage: user.profileImage
+                },
+                token
+            }
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Create new admin/manager
+// @route   POST /api/auth/admin/create
+// @access  Private (Admin Only)
+export const createAdmin = async (req: AuthRequest, res: Response) => {
+    try {
+        // Check if requester is admin (only admins can create other admins/managers)
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized to create admin accounts' });
+        }
+
+        const { employeeId, email, password, firstName, lastName, role } = req.body;
+
+        if (!['admin', 'manager'].includes(role)) {
+            return res.status(400).json({ success: false, message: 'Invalid role. Must be admin or manager.' });
+        }
+
+        const userExists = await User.findOne({ $or: [{ email }, { employeeId }] });
+
+        if (userExists) {
+            return res.status(400).json({
+                success: false,
+                message: 'User with this email or employee ID already exists'
+            });
+        }
+
+        const profileImage = `https://api.dicebear.com/9.x/avataaars/png?seed=${email}`;
+
+        const user = await User.create({
+            employeeId,
+            email,
+            password,
+            firstName,
+            lastName,
+            department: 'Management',
+            role,
+            profileImage,
+            isActive: true
+        });
+
+        res.status(201).json({
+            success: true,
+            message: `${role.charAt(0).toUpperCase() + role.slice(1)} created successfully`,
+            data: {
+                id: user._id,
+                employeeId: user.employeeId,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role
+            }
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Get current logged in user
 // @route   GET /api/auth/me
 // @access  Private

@@ -1,11 +1,13 @@
 import express from 'express';
-import { register, login, getMe, updateProfile, updateMembership, getMembershipStatus, approveMembership, getAllUsers, updateUser, deleteUser } from '../controllers/authController';
-import { protect } from '../middleware/auth';
+import { register, login, adminLogin, createAdmin, getMe, updateProfile, updateMembership, getMembershipStatus, approveMembership, getAllUsers, updateUser, deleteUser } from '../controllers/authController';
+import { protect, authorize } from '../middleware/auth';
 
 const router = express.Router();
 
 router.post('/register', protect, register);
 router.post('/login', login);
+router.post('/admin/login', adminLogin);
+router.post('/admin/create', protect, authorize('admin'), createAdmin);
 router.get('/me', protect, getMe);
 router.put('/me', protect, updateProfile);
 
