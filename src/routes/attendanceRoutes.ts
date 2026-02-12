@@ -6,7 +6,10 @@ import {
     getTodayStatus,
     getStats,
     getTodayAttendanceAll,
-    getMemberHistory
+    getMemberHistory,
+    getAbsentMembersToday,
+    manualClock,
+    deleteAttendance
 } from '../controllers/attendanceController';
 import { protect } from '../middleware/auth';
 
@@ -22,5 +25,7 @@ router.get('/stats', protect, getStats);
 router.get('/admin/today', protect, getTodayAttendanceAll);
 router.get('/admin/absent', protect, getAbsentMembersToday);
 router.get('/admin/history/:userId', protect, getMemberHistory);
+router.post('/admin/manual', protect, manualClock);
+router.delete('/admin/:id', protect, deleteAttendance);
 
 export default router;

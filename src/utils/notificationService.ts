@@ -45,7 +45,7 @@ class NotificationService {
      */
     async sendNotification(params: {
         recipientId: string;
-        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
+        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
         title: string;
         message: string;
         data?: any;
@@ -125,7 +125,7 @@ class NotificationService {
             // 1. Get all active users
             const users = await User.find({ isActive: true }).select('_id pushToken notificationsEnabled');
 
-            // 2. Save notifications in bulk (Optional: can be slow for thousands, but fine for gym scale)
+            // 2. Save notifications in bulk
             const notificationRecords = users.map(user => ({
                 recipient: user._id,
                 sender: senderId,
@@ -168,9 +168,8 @@ class NotificationService {
      * Send notifications to a list of specific users (Selected group)
      */
     async sendMultipleNotifications(params: {
-
         userIds: string[];
-        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
+        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
         title: string;
         message: string;
         data?: any;
@@ -229,4 +228,3 @@ class NotificationService {
 }
 
 export default new NotificationService();
-

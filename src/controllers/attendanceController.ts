@@ -32,7 +32,7 @@ export const getAbsentMembersToday = async (req: AuthRequest, res: Response) => 
         res.status(200).json({
             success: true,
             count: absentMembers.length,
-            absent: absentMembers.map(u => ({
+            data: absentMembers.map(u => ({
                 id: u._id,
                 employeeId: u.employeeId,
                 email: u.email,
@@ -531,6 +531,75 @@ export const getMemberHistory = async (req: AuthRequest, res: Response) => {
                 pages: Math.ceil(total / Number(limit))
             }
         });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+// @desc    Manual attendance log (Admin Only)
+// @route   POST /api/attendance/admin/manual
+// @access  Private (Admin)
+export const manualClock = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const { userId, date, clockIn, clockOut, status } = req.body;
+
+        if (!userId || !date || !clockIn) {
+            return res.status(400).json({ success: false, message: 'User ID, date and clock-in time are required' });
+        }
+
+        const logDate = moment(date).tz(TIMEZONE).startOf('day').toDate();
+        const clockInDate = moment(clockIn).toDate();
+        const clockOutDate = clockOut ? moment(clockOut).toDate() : undefined;
+
+        let attendance = await Attendance.findOne({ userId, date: logDate });
+
+        if (attendance) {
+            attendance.clockIn = clockInDate;
+            if (clockOutDate) attendance.clockOut = clockOutDate;
+            if (status) attendance.status = status;
+            await attendance.save();
+        } else {
+            attendance = await Attendance.create({
+                userId,
+                date: logDate,
+                clockIn: clockInDate,
+                clockOut: clockOutDate,
+                status: status || 'on-time',
+                location: {
+                    latitude: GYM_LATITUDE,
+                    longitude: GYM_LONGITUDE,
+                    address: 'Manual Entry by Admin'
+                }
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: attendance
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Delete attendance record (Admin Only)
+// @route   DELETE /api/attendance/admin/:id
+// @access  Private (Admin)
+export const deleteAttendance = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const attendance = await Attendance.findById(req.params.id);
+        if (!attendance) return res.status(404).json({ success: false, message: 'Record not found' });
+
+        await Attendance.findByIdAndDelete(req.params.id);
+
+        res.status(200).json({ success: true, message: 'Attendance record deleted' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -81,9 +81,47 @@ class SchedulerService {
                 }
             }
 
-            logger.info(`✅ Sent inactivity reminders to ${remindersSent} users`);
+            logger.info('✅ Sent inactivity reminders to ${remindersSent} users');
         } catch (error: any) {
-            logger.error('Error sending inactivity reminders:', error.message);
+            logger.error('Error sending inactivity reminders:', error);
+        }
+    }
+
+    /**
+     * Expire memberships that have passed their valid date
+     */
+    async expireMemberships() {
+        try {
+            const now = moment().tz(TIMEZONE).startOf('day').toDate();
+
+            // Find memberships that expired YESTERDAY or before and are still marked active
+            const expiredUsers = await User.find({
+                'membership.status': 'active',
+                'membership.expiryDate': { $lt: now }
+            });
+
+            logger.info(`Found ${expiredUsers.length} users with expired memberships to process`);
+
+            for (const user of expiredUsers) {
+                if (user.membership) {
+                    user.membership.status = 'expired';
+                    await user.save();
+
+                    // Send notification
+                    await notificationService.sendNotification({
+                        recipientId: user._id.toString(),
+                        type: 'membership_expired',
+                        title: 'Membership Expired ⚠️',
+                        message: 'Your gym membership has expired. Please renew to continue access.',
+                        data: { type: 'expired' }
+                    });
+
+                    logger.info(`Markdown user ${user.email} as expired.`);
+                }
+            }
+
+        } catch (error: any) {
+            logger.error('Error processing expired memberships:', error);
         }
     }
 
@@ -107,9 +145,18 @@ class SchedulerService {
             timezone: TIMEZONE
         });
 
+        // Run auto-expiration daily at Midnight (00:01)
+        cron.schedule('1 0 * * *', async () => {
+            logger.info('⏰ Running scheduled auto-expiration...');
+            await this.expireMemberships();
+        }, {
+            timezone: TIMEZONE
+        });
+
         logger.info('📅 Scheduler service initialized');
         logger.info('  - Expiry warnings: Daily at 9:00 AM');
         logger.info('  - Inactivity reminders: Daily at 6:00 PM');
+        logger.info('  - Auto Expiration: Daily at 12:01 AM');
     }
 }
 
