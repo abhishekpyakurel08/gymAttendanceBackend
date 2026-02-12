@@ -479,7 +479,8 @@ export const getTodayAttendanceAll = async (req: AuthRequest, res: Response) => 
         const today = moment().tz(TIMEZONE).startOf('day').toDate();
 
         const attendances = await Attendance.find({ date: today })
-            .populate('userId', 'firstName lastName email employeeId department profileImage');
+            .populate('userId', 'firstName lastName email employeeId department profileImage')
+            .sort({ clockIn: -1 });
 
         res.status(200).json({
             success: true,
@@ -535,12 +536,170 @@ export const getMemberHistory = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+// @desc    Admin/Staff Manual Clock In for User
+// @route   POST /api/attendance/admin/clock-in
+// @access  Private (Admin/Manager/Staff)
+export const adminClockIn = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const now = moment().tz(TIMEZONE);
+        const today = now.clone().startOf('day').toDate();
+
+        // Check if already clocked in
+        const existingAttendance = await Attendance.findOne({
+            userId: user._id,
+            date: today
+        });
+
+        if (existingAttendance) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is already clocked in for today'
+            });
+        }
+
+        // --- Membership Validation (Optional bypass for admins? No, rules should apply usually) ---
+        // We will enforce rules but allow overriding via 'force' param if needed later.
+        // For now, enforce basic active membership.
+        if (!user.membership || user.membership.status !== 'active') {
+            // Allow admin to override? For now, just warn.
+            // If we want to block, uncomment below:
+            // return res.status(400).json({ success: false, message: 'User membership is not active' });
+        }
+
+        // Determine lateness
+        const officeStart = moment(today).tz(TIMEZONE).set({
+            hour: parseInt(OFFICE_START_TIME.split(':')[0]),
+            minute: parseInt(OFFICE_START_TIME.split(':')[1])
+        });
+
+        const diffMinutes = now.diff(officeStart, 'minutes');
+        const status = diffMinutes > LATE_THRESHOLD ? 'late' : 'on-time';
+
+        // Create record
+        const attendance = await Attendance.create({
+            userId: user._id,
+            date: today,
+            clockIn: now.toDate(),
+            status,
+            location: {
+                address: 'Manual Check-in by ' + req.user.firstName,
+                latitude: GYM_LATITUDE,
+                longitude: GYM_LONGITUDE
+            }
+        });
+
+        // Increment monthly count if applicable
+        if (user.membership && user.membership.status === 'active') {
+            // Reset logic is complex, assuming standard flow
+            const lastReset = moment(user.membership.lastResetDate).tz(TIMEZONE);
+            if (now.month() !== lastReset.month() || now.year() !== lastReset.year()) {
+                user.membership.monthlyDayCount = 1;
+                user.membership.lastResetDate = now.toDate();
+            } else {
+                user.membership.monthlyDayCount += 1;
+            }
+            await user.save();
+        }
+
+        // Notifications
+        await notificationService.sendNotification({
+            recipientId: user._id.toString(),
+            type: 'clock_in',
+            title: 'Checked In by Staff  receptionist',
+            message: `Reception marked you as present at ${now.format('LT')}.`,
+            data: { attendanceId: attendance._id }
+        });
+
+        res.status(201).json({
+            success: true,
+            data: attendance,
+            message: 'User checked in successfully'
+        });
+
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Admin/Staff Manual Clock Out for User
+// @route   POST /api/attendance/admin/clock-out
+// @access  Private (Admin/Manager/Staff)
+export const adminClockOut = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+
+        const now = moment().tz(TIMEZONE);
+        const today = now.clone().startOf('day').toDate();
+
+        const attendance = await Attendance.findOne({
+            userId: userId,
+            date: today
+        });
+
+        if (!attendance) {
+            return res.status(400).json({ success: false, message: 'User has not clocked in today' });
+        }
+
+        if (attendance.clockOut) {
+            return res.status(400).json({ success: false, message: 'User is already clocked out' });
+        }
+
+        attendance.clockOut = now.toDate();
+        attendance.clockOutLocation = {
+            address: 'Manual Check-out by ' + req.user.firstName,
+            latitude: GYM_LATITUDE,
+            longitude: GYM_LONGITUDE
+        };
+
+        await attendance.save();
+
+        // Notification
+        await notificationService.sendNotification({
+            recipientId: userId,
+            type: 'clock_out',
+            title: 'Checked Out by Staff',
+            message: `Reception marked your session complete at ${now.format('LT')}.`,
+            data: { attendanceId: attendance._id }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: attendance,
+            message: 'User checked out successfully'
+        });
+
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Manual attendance log (Admin Only)
 // @route   POST /api/attendance/admin/manual
 // @access  Private (Admin)
 export const manualClock = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -590,7 +749,7 @@ export const manualClock = async (req: AuthRequest, res: Response) => {
 // @access  Private (Admin)
 export const deleteAttendance = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 

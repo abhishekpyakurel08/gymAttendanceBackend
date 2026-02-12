@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface INotification extends Document {
     recipient: mongoose.Types.ObjectId;
     sender?: mongoose.Types.ObjectId;
-    type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
+    type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder' | 'login_alert' | 'workout_reminder' | 'daily_greeting' | 'auto_greeting';
     title: string;
     message: string;
     data?: any;
@@ -25,7 +25,7 @@ const NotificationSchema = new Schema<INotification>({
     type: {
         type: String,
         required: true,
-        enum: ['membership_approved', 'membership_expired', 'clock_in', 'clock_out', 'system', 'reminder', 'announcement', 'new_member', 'membership_request', 'expiry_warning', 'inactivity_reminder']
+        enum: ['membership_approved', 'membership_expired', 'clock_in', 'clock_out', 'system', 'reminder', 'announcement', 'new_member', 'membership_request', 'expiry_warning', 'inactivity_reminder', 'login_alert', 'workout_reminder', 'daily_greeting', 'auto_greeting']
     },
     title: {
         type: String,

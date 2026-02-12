@@ -20,6 +20,9 @@ import adminRoutes from './routes/adminRoutes';
 import staffRoutes from './routes/staffRoutes';
 import reportRoutes from './routes/reportRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
+import gymSettingsRoutes from './routes/gymSettingsRoutes';
+
+import schedulerService from './utils/schedulerService';
 
 // Load environment variables
 dotenv.config();
@@ -31,21 +34,15 @@ const httpServer = createServer(app);
 // Initialize Socket.io
 const io = new Server(httpServer, {
     cors: {
-        origin: '*', // Adjust for production
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
         methods: ['GET', 'POST']
     }
 });
 
-// Initialize Notification Service
+// Initialize Services
 notificationService.init(io);
 firebaseService.init();
-
-// Initialize Scheduler Service (Expiry & Inactivity Notifications)
-import schedulerService from './utils/schedulerService';
 schedulerService.init();
-
-// Connect to database
-connectDB();
 
 // Security Middlewares
 app.use(helmet());
@@ -84,6 +81,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/gym-settings', gymSettingsRoutes);
 
 // Health check route
 import mongoose from 'mongoose';
@@ -132,7 +130,17 @@ app.use((err: any, req: Request, res: Response, next: any) => {
 // Start server
 const PORT = process.env.PORT || 5000;
 
-httpServer.listen(PORT, () => {
-    logger.info(` Server running on port ${PORT}`);
-    logger.info(` Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+const startServer = async () => {
+    try {
+        await connectDB();
+        httpServer.listen(PORT, () => {
+            logger.info(`✅ Server running on port ${PORT}`);
+            logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+        });
+    } catch (error) {
+        logger.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+};
+
+startServer();

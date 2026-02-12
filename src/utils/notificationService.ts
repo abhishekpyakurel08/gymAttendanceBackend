@@ -45,7 +45,7 @@ class NotificationService {
      */
     async sendNotification(params: {
         recipientId: string;
-        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
+        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder' | 'login_alert' | 'workout_reminder' | 'daily_greeting' | 'auto_greeting';
         title: string;
         message: string;
         data?: any;
@@ -169,7 +169,7 @@ class NotificationService {
      */
     async sendMultipleNotifications(params: {
         userIds: string[];
-        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder';
+        type: 'membership_approved' | 'membership_expired' | 'clock_in' | 'clock_out' | 'system' | 'reminder' | 'announcement' | 'new_member' | 'membership_request' | 'expiry_warning' | 'inactivity_reminder' | 'login_alert' | 'workout_reminder' | 'daily_greeting' | 'auto_greeting';
         title: string;
         message: string;
         data?: any;

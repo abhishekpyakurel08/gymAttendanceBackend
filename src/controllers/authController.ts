@@ -199,15 +199,91 @@ export const login = async (req: Request, res: Response) => {
             role: user.role
         });
 
-        // 🚀 MOTIVATIONAL WELCOME
+        // 🕐 TIME-BASED GREETING NOTIFICATION
         try {
+            const loginTime = moment().tz('Asia/Kathmandu');
+            const hour = loginTime.hour();
+            let greeting = '';
+            let emoji = '';
+            let motivationalMsg = '';
+
+            if (hour < 6) {
+                greeting = 'Early Bird Alert! 🌙';
+                emoji = '🌙';
+                motivationalMsg = 'You\'re up before the sun! That\'s serious dedication. Let\'s make today count! 💪';
+            } else if (hour < 10) {
+                greeting = 'Good Morning! ☀️';
+                emoji = '☀️';
+                motivationalMsg = 'Rise and grind! Morning workouts set the tone for a winning day. Let\'s go! 🔥';
+            } else if (hour < 12) {
+                greeting = 'Late Morning Check-in! 🌤️';
+                emoji = '🌤️';
+                motivationalMsg = 'Better late than never! Your body will thank you. Let\'s crush it! 💪';
+            } else if (hour < 14) {
+                greeting = 'Afternoon Power! 🌞';
+                emoji = '🌞';
+                motivationalMsg = 'Lunch break workout? That\'s next level commitment! Keep pushing! 🏋️';
+            } else if (hour < 17) {
+                greeting = 'Afternoon Hustle! 💪';
+                emoji = '💪';
+                motivationalMsg = 'The afternoon session is all about focus and power. You\'ve got this! 🔥';
+            } else if (hour < 20) {
+                greeting = 'Evening Warriors! 🌆';
+                emoji = '🌆';
+                motivationalMsg = 'Evening workouts = stress relief + gains. The perfect combo! 💥';
+            } else {
+                greeting = 'Night Owl Mode! 🦉';
+                emoji = '🦉';
+                motivationalMsg = 'Late night grind! Respect the hustle. Make every rep count! 🏋️‍♂️';
+            }
+
+            // Membership status info for the greeting
+            let membershipInfo = '';
+            if (user.membership?.expiryDate) {
+                const daysLeft = moment(user.membership.expiryDate).diff(loginTime, 'days');
+                if (daysLeft <= 3 && daysLeft >= 0) {
+                    membershipInfo = ` ⚠️ Your membership expires in ${daysLeft} day(s)!`;
+                }
+            }
+
+            // Send personalized greeting to the logged-in member
             notificationService.sendNotification({
                 recipientId: user._id.toString(),
-                type: 'system',
-                title: 'Welcome to Shankhamul Gym! 🏋️‍♂️',
-                message: 'Consistency is key! Let\'s crush your goals today. 💪',
-                data: { type: 'motivation' }
+                type: 'daily_greeting',
+                title: `${greeting}`,
+                message: `${motivationalMsg}${membershipInfo}`,
+                data: { type: 'daily_greeting', loginTime: loginTime.format('hh:mm A'), period: hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening' }
             }).catch(() => { });
+
+            // 🔔 ADMIN LOGIN ALERT: Notify all admins when a member logs in
+            const admins = await User.find({ role: { $in: ['admin', 'manager'] }, isActive: true });
+            for (const admin of admins) {
+                notificationService.sendNotification({
+                    recipientId: admin._id.toString(),
+                    type: 'login_alert',
+                    title: '🔑 Member Login Alert',
+                    message: `${user.firstName} ${user.lastName} (${user.employeeId}) logged in at ${loginTime.format('hh:mm A')}. Membership: ${user.membership?.plan || 'none'} (${user.membership?.status || 'N/A'})`,
+                    data: {
+                        type: 'login_alert',
+                        userId: user._id,
+                        memberName: `${user.firstName} ${user.lastName}`,
+                        employeeId: user.employeeId,
+                        loginTime: loginTime.format('YYYY-MM-DD HH:mm:ss'),
+                        membershipPlan: user.membership?.plan,
+                        membershipStatus: user.membership?.status
+                    }
+                }).catch(() => { });
+            }
+
+            // Real-time admin dashboard event
+            notificationService.sendAdminNotification('member_login', {
+                userId: user._id,
+                userName: `${user.firstName} ${user.lastName}`,
+                employeeId: user.employeeId,
+                profileImage: user.profileImage,
+                loginTime: loginTime.format('HH:mm:ss'),
+                membershipStatus: user.membership?.status
+            });
         } catch (e) { }
 
         res.status(200).json({
@@ -408,11 +484,33 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
+        // 🔒 RESTRICTION: Only expired or no membership can request new subscription
+        if (user.membership && user.membership.status === 'active') {
+            // Check if membership is truly active (not expired)
+            const expiryDate = moment(user.membership.expiryDate);
+            const now = moment();
+
+            if (expiryDate.isAfter(now)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You already have an active membership. You can only request a new subscription after your current membership expires.'
+                });
+            }
+        }
+
+        // Check if there's already a pending request
+        if (user.membership && user.membership.status === 'pending') {
+            return res.status(400).json({
+                success: false,
+                message: 'You already have a pending membership request. Please wait for approval.'
+            });
+        }
+
         let start = startDate ? moment(startDate) : moment();
         let isRenewal = false;
 
-        if (user.membership && user.membership.status === 'active' && moment(user.membership.expiryDate).isAfter(moment())) {
-            start = moment(user.membership.expiryDate);
+        // If previous membership exists and is expired, this is a renewal
+        if (user.membership && user.membership.status === 'expired') {
             isRenewal = true;
         }
 
