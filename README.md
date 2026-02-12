@@ -52,14 +52,14 @@ Then edit the `.env` file:
 PORT=5000
 NODE_ENV=development
 
-MONGODB_URI=mongodb://localhost:27017/shankmul_gym_attendance
+MONGODB_URI=your_mongodb_connection_string
 # For MongoDB Atlas: mongodb+srv://username:password@cluster.mongodb.net/shankmul_gym_attendance
 
 # JWT Configuration - 1 YEAR EXPIRATION
 JWT_SECRET=your_super_secret_jwt_key_change_in_production
 JWT_EXPIRE=365d
 
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=https://shankmul-gym-backend.tecobit.cloud
 
 DEFAULT_TIMEZONE=Asia/Kathmandu
 OFFICE_START_TIME=09:00
@@ -171,7 +171,7 @@ src/
 
 ### Register User
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST https://shankmul-gym-backend.tecobit.cloud/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "employeeId": "EMP-001",
@@ -187,7 +187,7 @@ curl -X POST http://localhost:5000/api/auth/register \
 
 ### Login
 ```bash
-curl -X POST http://localhost:5000/api/auth/login \
+curl -X POST https://shankmul-gym-backend.tecobit.cloud/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@shankmulgym.com",
@@ -199,7 +199,7 @@ curl -X POST http://localhost:5000/api/auth/login \
 
 ### Clock In
 ```bash
-curl -X POST http://localhost:5000/api/attendance/clock-in \
+curl -X POST https://shankmul-gym-backend.tecobit.cloud/api/attendance/clock-in \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -211,7 +211,7 @@ curl -X POST http://localhost:5000/api/attendance/clock-in \
 
 ### Clock Out
 ```bash
-curl -X PUT http://localhost:5000/api/attendance/clock-out \
+curl -X PUT https://shankmul-gym-backend.tecobit.cloud/api/attendance/clock-out \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -266,7 +266,7 @@ curl -X PUT http://localhost:5000/api/attendance/clock-out \
 
 **Local MongoDB:**
 ```
-mongodb://localhost:27017/shankmul_gym_attendance
+your_mongodb_connection_string
 ```
 
 **MongoDB Atlas:**
@@ -289,12 +289,12 @@ mongodb+srv://username:password@cluster.mongodb.net/shankmul_gym_attendance
 
 Test the server is running:
 ```bash
-curl http://localhost:5000/health
+curl https://shankmul-gym-backend.tecobit.cloud/health
 ```
 
 Test root endpoint:
 ```bash
-curl http://localhost:5000/
+curl https://shankmul-gym-backend.tecobit.cloud/
 ```
 
 ## Troubleshooting
