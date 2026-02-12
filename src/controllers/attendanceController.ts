@@ -541,7 +541,7 @@ export const getMemberHistory = async (req: AuthRequest, res: Response) => {
 // @access  Private (Admin/Manager/Staff)
 export const adminClockIn = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -640,7 +640,7 @@ export const adminClockIn = async (req: AuthRequest, res: Response) => {
 // @access  Private (Admin/Manager/Staff)
 export const adminClockOut = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -699,7 +699,7 @@ export const adminClockOut = async (req: AuthRequest, res: Response) => {
 // @access  Private (Admin)
 export const manualClock = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -749,7 +749,7 @@ export const manualClock = async (req: AuthRequest, res: Response) => {
 // @access  Private (Admin)
 export const deleteAttendance = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 

@@ -5,7 +5,8 @@ export interface ITransaction extends Document {
     category: 'income' | 'expense';
     type: 'subscription' | 'registration' | 'salary' | 'rent' | 'electricity' | 'maintenance' | 'other';
     amount: number;
-    method: 'cash' | 'online';
+    method: 'cash' | 'online' | 'esewa' | 'khalti' | 'bank' | 'Cash' | 'eSewa' | 'Khalti' | 'Bank';
+
     plan?: string;
     description?: string;
     date: Date;
@@ -36,9 +37,10 @@ const TransactionSchema = new Schema<ITransaction>({
     },
     method: {
         type: String,
-        enum: ['cash', 'online'],
+        enum: ['cash', 'online', 'esewa', 'khalti', 'bank', 'Cash', 'eSewa', 'Khalti', 'Bank'],
         required: true
     },
+
     plan: {
         type: String
     },

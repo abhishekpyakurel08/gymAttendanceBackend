@@ -10,7 +10,8 @@ import notificationService from '../utils/notificationService';
 // @access  Private (Admin/Manager)
 export const register = async (req: Request, res: Response) => {
     try {
-        const { employeeId, email, phoneNumber, password, firstName, lastName, department, role, age, gender, shift, requestedPlan } = req.body;
+        const { employeeId, email, phoneNumber, password, firstName, lastName, department, role, age, gender, shift, requestedPlan, admissionFee, monthlyFee, paymentMethod } = req.body;
+
 
         const userExists = await User.findOne({ $or: [{ email }, { employeeId }] });
 
@@ -83,19 +84,36 @@ export const register = async (req: Request, res: Response) => {
             membership
         });
 
-        // 💰 AUTOMATED TRANSACTION RECORDING
-        if (requestedPlan && requestedPlan !== 'none' && req.body.initialPaymentAmount > 0) {
-            await require('../models/Transaction').default.create({
+        // 💰 AUTOMATED TRANSACTION RECORDING (SPLIT)
+        const Transaction = require('../models/Transaction').default;
+
+        // 1. Record Admission Fee
+        if (admissionFee > 0) {
+            await Transaction.create({
                 userId: user._id,
                 category: 'income',
-                type: requestedPlan === 'admission' ? 'registration' : 'subscription',
-                amount: req.body.initialPaymentAmount,
-                method: 'cash', // Default to cash for direct admin creation
-                plan: requestedPlan !== 'admission' ? requestedPlan : undefined,
-                description: `Initial payment for ${requestedPlan === 'admission' ? 'Admission' : requestedPlan} plan`,
+                type: 'registration',
+                amount: admissionFee,
+                method: paymentMethod || 'cash',
+                description: `Admission Fee for ${user.firstName} ${user.lastName}`,
                 date: new Date()
             });
         }
+
+        // 2. Record Package/Monthly Fee
+        if (monthlyFee > 0) {
+            await Transaction.create({
+                userId: user._id,
+                category: 'income',
+                type: 'subscription',
+                amount: monthlyFee,
+                method: paymentMethod || 'cash',
+                plan: requestedPlan !== 'admission' ? requestedPlan : undefined,
+                description: `Subscription payment (${requestedPlan}) for ${user.firstName} ${user.lastName}`,
+                date: new Date()
+            });
+        }
+
 
         const token = generateToken({
             id: user._id.toString(),
@@ -328,9 +346,9 @@ export const adminLogin = async (req: Request, res: Response) => {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        // Check if user is admin or manager
-        if (user.role !== 'admin' && user.role !== 'manager') {
-            return res.status(403).json({ success: false, message: 'Access denied. Only admins and managers can login here.' });
+        // Check if user is admin, manager or reception
+        if (user.role !== 'admin' && user.role !== 'manager' && user.role !== 'reception') {
+            return res.status(403).json({ success: false, message: 'Access denied. Only admins, managers and reception can login here.' });
         }
 
         if (!user.isActive) {
@@ -442,7 +460,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 // @access  Private
 export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
-        const { firstName, lastName, preferredWorkoutStart, preferredWorkoutEnd, pushToken, notificationsEnabled } = req.body;
+        const { firstName, lastName, password, preferredWorkoutStart, preferredWorkoutEnd, pushToken, notificationsEnabled } = req.body;
 
         const user = await User.findById(req.user.id);
         if (!user) {
@@ -451,6 +469,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
         if (firstName) user.firstName = firstName;
         if (lastName) user.lastName = lastName;
+        if (password) user.password = password; // Pre-save hook will hash it
         if (preferredWorkoutStart) user.preferredWorkoutStart = preferredWorkoutStart;
         if (preferredWorkoutEnd) user.preferredWorkoutEnd = preferredWorkoutEnd;
         if (pushToken) user.pushToken = pushToken;
@@ -566,7 +585,7 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
 // @access  Private (Admin)
 export const approveMembership = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -599,7 +618,7 @@ export const approveMembership = async (req: AuthRequest, res: Response) => {
 // @desc    Get All Users (Admin Only)
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 

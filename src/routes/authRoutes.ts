@@ -4,7 +4,7 @@ import { protect, authorize } from '../middleware/auth';
 
 const router = express.Router();
 
-router.post('/register', protect, register);
+router.post('/register', protect, authorize('admin', 'manager', 'reception'), register);
 router.post('/login', login);
 router.post('/admin/login', adminLogin);
 router.post('/admin/create', protect, authorize('admin'), createAdmin);
@@ -22,9 +22,9 @@ router.put('/update-push-token', protect, (req: any, res) => {
 });
 
 // Admin routes
-router.put('/membership/approve/:userId', protect, approveMembership);
-router.get('/users', protect, getAllUsers);
-router.put('/users/:id', protect, updateUser);
-router.delete('/users/:id', protect, deleteUser);
+router.put('/membership/approve/:userId', protect, authorize('admin', 'manager', 'reception'), approveMembership);
+router.get('/users', protect, authorize('admin', 'manager', 'reception'), getAllUsers);
+router.put('/users/:id', protect, authorize('admin', 'manager', 'reception'), updateUser);
+router.delete('/users/:id', protect, authorize('admin', 'manager'), deleteUser);
 
 export default router;

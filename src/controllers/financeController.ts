@@ -15,7 +15,7 @@ const TIMEZONE = 'Asia/Kathmandu';
  */
 export const getDailyStats = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -60,13 +60,78 @@ export const getDailyStats = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * @desc    Get weekly financial stats for charts (Last 7 days)
+ * @route   GET /api/finance/stats/weekly
+ * @access  Private (Admin/Manager/Reception)
+ */
+export const getWeeklyStats = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        const startOfSevenDaysAgo = moment().tz(TIMEZONE).subtract(6, 'days').startOf('day').toDate();
+        const endOfToday = moment().tz(TIMEZONE).endOf('day').toDate();
+
+        const weeklyStats = await Transaction.aggregate([
+            {
+                $match: {
+                    date: { $gte: startOfSevenDaysAgo, $lte: endOfToday }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        day: { $dayOfWeek: '$date' },
+                        date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+                        category: '$category'
+                    },
+                    amount: { $sum: '$amount' }
+                }
+            },
+            { $sort: { '_id.date': 1 } }
+        ]);
+
+        // Days map for labels
+        const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const chartData: any[] = [];
+
+        // Initialize last 7 days including today
+        for (let i = 6; i >= 0; i--) {
+            const m = moment().tz(TIMEZONE).subtract(i, 'days');
+            chartData.push({
+                name: dayLabels[m.day()],
+                date: m.format('YYYY-MM-DD'),
+                income: 0,
+                expense: 0
+            });
+        }
+
+        weeklyStats.forEach(stat => {
+            const dataPoint = chartData.find(d => d.date === stat._id.date);
+            if (dataPoint) {
+                if (stat._id.category === 'income') dataPoint.income = stat.amount;
+                else dataPoint.expense = stat.amount;
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: chartData
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
  * @desc    Get monthly financial stats for charts
  * @route   GET /api/finance/stats/monthly
  * @access  Private (Admin only)
  */
 export const getMonthlyStats = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -124,7 +189,7 @@ export const getMonthlyStats = async (req: AuthRequest, res: Response) => {
  */
 export const getTransactions = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -173,7 +238,7 @@ export const getTransactions = async (req: AuthRequest, res: Response) => {
  */
 export const addTransaction = async (req: AuthRequest, res: Response) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'reception') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
