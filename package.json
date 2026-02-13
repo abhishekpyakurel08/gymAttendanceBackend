@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",
-    "aws-sdk": "^2.1500.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "cross-env": "^10.1.0",
@@ -26,8 +25,6 @@
     "moment-timezone": "^0.5.43",
     "mongoose": "^8.0.0",
     "morgan": "^1.10.1",
-    "multer": "^1.4.5-lts.1",
-    "multer-s3": "^2.10.0",
     "node-cron": "^4.2.1",
     "socket.io": "^4.8.3",
     "winston": "^3.19.0"
@@ -38,7 +35,6 @@
     "@types/express": "^4.17.25",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
-    "@types/multer": "^1.4.11",
     "@types/node": "^20.19.30",
     "@types/socket.io": "^3.0.1",
     "nodemon": "^3.0.1",

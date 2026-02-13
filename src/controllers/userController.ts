@@ -2,9 +2,6 @@ import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import User from '../models/User';
 import { AuthRequest } from '../middleware/auth';
-import path from 'path';
-import fs from 'fs';
-
 // @desc    Get user profile
 // @route   GET /api/user/profile
 // @access  Private
@@ -46,48 +43,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
             success: true,
             data: user
         });
-    } catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-// @desc    Upload profile image
-// @route   POST /api/user/profile/image
-// @access  Private
-export const uploadProfileImage = async (req: AuthRequest, res: Response) => {
-    try {
-        const file = (req as any).file;
-        if (!file) {
-            return res.status(400).json({ success: false, message: 'Please upload a file' });
-        }
-
-        const user = await User.findById(req.user.id);
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-
-        let imageUrl = '';
-        if (file.location) {
-            // S3
-            imageUrl = file.location;
-        } else {
-            // Local
-            const protocol = req.protocol;
-            const host = req.get('host');
-            // Assuming static serve for 'uploads' folder is set up in app.ts/server.ts
-            // We need to ensure app.use('/uploads', express.static('uploads')) exists!
-            imageUrl = `${protocol}://${host}/uploads/${file.filename}`;
-        }
-
-        user.profileImage = imageUrl;
-        await user.save();
-
-        res.status(200).json({
-            success: true,
-            imageUrl: imageUrl,
-            message: 'Profile image uploaded successfully'
-        });
-
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
