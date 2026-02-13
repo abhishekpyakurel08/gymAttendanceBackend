@@ -5,11 +5,14 @@ import {
     expireMembership,
     updateUser,
     toggleUserStatus,
-    deleteUser
+    deleteUser,
+    exportMembers
 } from '../controllers/adminController';
 import { protect, authorize } from '../middleware/auth';
 
 const router = express.Router();
+
+router.get('/export-members', protect, authorize('admin', 'manager'), exportMembers);
 
 // Membership Management
 router.post('/membership/:userId', protect, authorize('admin', 'manager', 'reception'), createMembership);

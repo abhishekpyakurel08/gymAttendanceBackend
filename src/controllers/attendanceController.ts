@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import notificationService from '../utils/notificationService';
 import mongoose from 'mongoose';
 import logger from '../utils/logger';
+import GymSettings from '../models/GymSettings';
 
 // @desc    Get absent members for today
 // @route   GET /api/attendance/admin/absent
@@ -141,81 +142,99 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        // --- Gym Operating Hours Validation ---
-        const now = moment().tz(TIMEZONE);
-        const dayOfWeek = now.day(); // 0 (Sun) to 6 (Sat)
-        const hour = now.hour();
+        // --- Gym Operating Hours Validation (DYNAMIC) ---
+        let settings = await GymSettings.findOne();
+        if (!settings) {
+            // Default settings if none found
+            settings = {
+                timezone: TIMEZONE,
+                operatingHours: {
+                    monday: { isOpen: true, openTime: '05:00', closeTime: '20:00' },
+                    tuesday: { isOpen: true, openTime: '05:00', closeTime: '20:00' },
+                    wednesday: { isOpen: true, openTime: '05:00', closeTime: '20:00' },
+                    thursday: { isOpen: true, openTime: '05:00', closeTime: '20:00' },
+                    friday: { isOpen: true, openTime: '05:00', closeTime: '20:00' },
+                    saturday: { isOpen: false, openTime: '05:00', closeTime: '20:00' },
+                    sunday: { isOpen: true, openTime: '05:00', closeTime: '20:00' }
+                }
+            } as any;
+        }
 
-        // 1. Check if Saturday (Closed)
-        if (dayOfWeek === 6) {
+        const safeSettings = settings!;
+        const currentTz = safeSettings.timezone || TIMEZONE;
+        const now = moment().tz(currentTz);
+        const dayName = now.format('dddd').toLowerCase() as keyof typeof safeSettings.operatingHours;
+        const currentTime = now.format('HH:mm');
+        const todayHours = safeSettings.operatingHours[dayName];
+
+        if (!todayHours || !todayHours.isOpen) {
             return res.status(403).json({
                 success: false,
-                message: 'Gym is closed on Saturdays.'
+                message: `Gym is closed on ${now.format('dddd')}s.`
             });
         }
 
-        // 2. Check Operating Hours (05:00 - 20:00)
-        // Adjust these variables as needed or move to env vars
-        const OPEN_HOUR = 5;
-        const CLOSE_HOUR = 20;
-
-        if (hour < OPEN_HOUR || hour >= CLOSE_HOUR) {
+        if (currentTime < todayHours.openTime || currentTime >= todayHours.closeTime) {
             return res.status(403).json({
                 success: false,
-                message: `Gym is closed. Operating hours are ${OPEN_HOUR}:00 to ${CLOSE_HOUR}:00.`
+                message: `Gym is closed. Operating hours for today are ${todayHours.openTime} to ${todayHours.closeTime}.`
             });
         }
 
-        // --- Membership & 26-Day Rule Validation ---
+        // --- Role-Based Validation ---
+        const isStaff = ['admin', 'manager', 'reception'].includes(user.role);
+        let notificationMsg = null;
 
-        // Reset monthly count if it's a new month
-        const lastReset = moment(user.membership?.lastResetDate).tz(TIMEZONE);
+        if (!isStaff) {
+            // --- Membership & 26-Day Rule Validation (FOR MEMBERS ONLY) ---
 
-        if (now.month() !== lastReset.month() || now.year() !== lastReset.year()) {
-            if (user.membership) {
-                user.membership.monthlyDayCount = 0;
-                user.membership.lastResetDate = now.toDate();
+            // Reset monthly count if it's a new month
+            const lastReset = moment(user.membership?.lastResetDate).tz(TIMEZONE);
+
+            if (now.month() !== lastReset.month() || now.year() !== lastReset.year()) {
+                if (user.membership) {
+                    user.membership.monthlyDayCount = 0;
+                    user.membership.lastResetDate = now.toDate();
+                }
+            }
+
+            // 1. Check if membership exists
+            if (!user.membership || user.membership.plan === 'none' || user.membership.status !== 'active') {
+                const statusMsg = user.membership?.status === 'pending'
+                    ? 'Your membership is pending admin approval'
+                    : 'Active gym membership required to clock in';
+
+                return res.status(403).json({
+                    success: false,
+                    message: statusMsg
+                });
+            }
+
+            // 2. Check 26-day monthly limit
+            if (user.membership.monthlyDayCount >= 26) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Monthly limit of 26 days reached'
+                });
+            }
+
+            // 3. Check if membership is expired
+            const expiryDate = moment(user.membership.expiryDate);
+            if (now.isAfter(expiryDate)) {
+                user.membership.status = 'expired';
+                await user.save();
+                return res.status(403).json({
+                    success: false,
+                    message: 'Your membership has expired. Please renew.'
+                });
+            }
+
+            // 4. Detect 3-day expiry warning
+            const diffDays = expiryDate.diff(now, 'days');
+            if (diffDays <= 3 && diffDays >= 0) {
+                notificationMsg = `Your membership expires in ${diffDays} days! Please renew soon.`;
             }
         }
-
-        // 1. Check if membership exists
-        if (!user.membership || user.membership.plan === 'none' || user.membership.status !== 'active') {
-            const statusMsg = user.membership?.status === 'pending'
-                ? 'Your membership is pending admin approval'
-                : 'Active gym membership required to clock in';
-
-            return res.status(403).json({
-                success: false,
-                message: statusMsg
-            });
-        }
-
-        // 2. Check 26-day monthly limit
-        if (user.membership.monthlyDayCount >= 26) {
-            return res.status(403).json({
-                success: false,
-                message: 'Monthly limit of 26 days reached'
-            });
-        }
-
-        // 3. Check if membership is expired
-        const expiryDate = moment(user.membership.expiryDate);
-        if (now.isAfter(expiryDate)) {
-            user.membership.status = 'expired';
-            await user.save();
-            return res.status(403).json({
-                success: false,
-                message: 'Your membership has expired. Please renew.'
-            });
-        }
-
-        // 4. Detect 3-day expiry warning
-        const diffDays = expiryDate.diff(now, 'days');
-        let notificationMsg = null;
-        if (diffDays <= 3 && diffDays >= 0) {
-            notificationMsg = `Your membership expires in ${diffDays} days! Please renew soon.`;
-        }
-
         const today = moment().tz(TIMEZONE).startOf('day').toDate();
         const clockInDate = now.toDate();
 
@@ -232,10 +251,11 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        // Determine if late
-        const officeStart = moment(today).tz(TIMEZONE).set({
-            hour: parseInt(OFFICE_START_TIME.split(':')[0]),
-            minute: parseInt(OFFICE_START_TIME.split(':')[1])
+        // Determine if late (Dynamic based on settings or env)
+        const dayStartTime = todayHours.openTime || OFFICE_START_TIME;
+        const officeStart = moment(today).tz(currentTz).set({
+            hour: parseInt(dayStartTime.split(':')[0]),
+            minute: parseInt(dayStartTime.split(':')[1])
         });
 
         const diffMinutes = now.diff(officeStart, 'minutes');
@@ -735,6 +755,7 @@ export const adminClockOut = async (req: AuthRequest, res: Response) => {
             userId: userId,
             time: now.format('HH:mm:ss'),
         });
+        notificationService.sendAdminNotification('stats_updated', { type: 'attendance' });
 
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
@@ -811,6 +832,7 @@ export const deleteAttendance = async (req: AuthRequest, res: Response) => {
         notificationService.sendAdminNotification('attendance_deleted', {
             attendanceId: req.params.id
         });
+        notificationService.sendAdminNotification('stats_updated', { type: 'attendance' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

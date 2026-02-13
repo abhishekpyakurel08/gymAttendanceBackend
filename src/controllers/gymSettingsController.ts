@@ -71,6 +71,11 @@ export const updateGymSettings = async (req: AuthRequest, res: Response) => {
             message: 'Gym settings updated successfully',
             data: settings
         });
+
+        // 🔄 BROADCAST TO ALL CLIENTS
+        const notificationService = require('../utils/notificationService').default;
+        notificationService.sendAdminNotification('gym_settings_updated', { settings });
+        notificationService.sendBroadcastNotification('gym_settings_updated', { settings });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

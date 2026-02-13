@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import moment from 'moment-timezone';
 import User from '../models/User';
 import Attendance from '../models/Attendance';
+import GymSettings, { IGymSettings } from '../models/GymSettings';
 import notificationService from './notificationService';
 import logger from './logger';
 
@@ -29,7 +30,9 @@ class SchedulerService {
      */
     async sendExpiryWarnings() {
         try {
-            const now = moment().tz(TIMEZONE);
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
 
             // Define targeted days
             const checkDays = [
@@ -95,7 +98,9 @@ class SchedulerService {
      */
     async sendInactivityReminders() {
         try {
-            const now = moment().tz(TIMEZONE);
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
             const threeDaysAgo = now.clone().subtract(3, 'days').startOf('day').toDate();
 
             // Get all active members
@@ -141,12 +146,15 @@ class SchedulerService {
      */
     async expireMemberships() {
         try {
-            const now = moment().tz(TIMEZONE).startOf('day').toDate();
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
+            const today = now.clone().startOf('day').toDate();
 
             // Find memberships that expired YESTERDAY or before and are still marked active
             const expiredUsers = await User.find({
                 'membership.status': 'active',
-                'membership.expiryDate': { $lt: now }
+                'membership.expiryDate': { $lt: today }
             });
 
             logger.info(`Found ${expiredUsers.length} users with expired memberships to process`);
@@ -181,6 +189,10 @@ class SchedulerService {
                         data: { type: 'admin_expired_alert', count: expiredUsers.length }
                     });
                 }
+
+                // 🔄 BROADCAST TO DASHBOARDS
+                notificationService.sendAdminNotification('stats_updated', { type: 'membership' });
+                notificationService.sendAdminNotification('membership_approved', { type: 'auto_expire', count: expiredUsers.length });
             }
 
         } catch (error: any) {
@@ -194,12 +206,19 @@ class SchedulerService {
      */
     async sendMorningGreetings() {
         try {
-            const now = moment().tz(TIMEZONE);
-            const dayOfWeek = now.day();
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
+            const dayName = now.format('dddd').toLowerCase() as keyof IGymSettings['operatingHours'];
 
-            // Skip Saturday (gym is closed)
-            if (dayOfWeek === 6) {
-                logger.info('⏭️ Skipping morning greetings - Saturday (gym closed)');
+            // Check if gym is open today
+            if (settings && settings.operatingHours && settings.operatingHours[dayName]) {
+                if (!settings.operatingHours[dayName].isOpen) {
+                    logger.info(`⏭️ Skipping morning greetings - ${dayName} (gym closed)`);
+                    return;
+                }
+            } else if (now.day() === 6) { // Fallback for Saturday
+                logger.info('⏭️ Skipping morning greetings - Saturday (Default closed day)');
                 return;
             }
 
@@ -239,15 +258,26 @@ class SchedulerService {
      */
     async sendWorkoutReminders() {
         try {
-            const now = moment().tz(TIMEZONE);
-            const dayOfWeek = now.day();
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
+            const dayName = now.format('dddd').toLowerCase() as keyof IGymSettings['operatingHours'];
             const currentHour = now.hour();
 
-            // Skip Saturday
-            if (dayOfWeek === 6) return;
+            // Check if gym is open today
+            if (settings && settings.operatingHours && settings.operatingHours[dayName]) {
+                const todayHours = settings.operatingHours[dayName];
+                if (!todayHours.isOpen) return;
 
-            // Skip hours outside gym operating hours (5 AM - 8 PM)
-            if (currentHour < 5 || currentHour >= 20) return;
+                // Skip hours outside gym operating hours
+                const openHour = parseInt(todayHours.openTime.split(':')[0]);
+                const closeHour = parseInt(todayHours.closeTime.split(':')[0]);
+                if (currentHour < openHour || currentHour >= closeHour) return;
+            } else {
+                // Fallback logic
+                if (now.day() === 6) return;
+                if (currentHour < 5 || currentHour >= 20) return;
+            }
 
             // Find users whose preferred workout start is within the next hour
             const targetHour = String(currentHour + 1).padStart(2, '0');
@@ -264,7 +294,7 @@ class SchedulerService {
             if (usersToNotify.length === 0) return;
 
             // Check if they already visited today - no need to remind
-            const today = moment().tz(TIMEZONE).startOf('day').toDate();
+            const today = now.clone().startOf('day').toDate();
 
             for (const user of usersToNotify) {
                 const alreadyVisited = await Attendance.findOne({
@@ -298,7 +328,9 @@ class SchedulerService {
      */
     async sendWeeklyProgress() {
         try {
-            const now = moment().tz(TIMEZONE);
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
             const weekStart = now.clone().subtract(7, 'days').startOf('day').toDate();
             const weekEnd = now.clone().startOf('day').toDate();
 
@@ -355,13 +387,19 @@ class SchedulerService {
      */
     async sendEveningReminders() {
         try {
-            const now = moment().tz(TIMEZONE);
-            const dayOfWeek = now.day();
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
+            const dayName = now.format('dddd').toLowerCase() as keyof IGymSettings['operatingHours'];
 
-            // Skip Saturday
-            if (dayOfWeek === 6) return;
+            // Check if gym is open today
+            if (settings && settings.operatingHours && settings.operatingHours[dayName]) {
+                if (!settings.operatingHours[dayName].isOpen) return;
+            } else if (now.day() === 6) {
+                return;
+            }
 
-            const today = moment().tz(TIMEZONE).startOf('day').toDate();
+            const today = now.clone().startOf('day').toDate();
             const randomMessage = EVENING_MESSAGES[Math.floor(Math.random() * EVENING_MESSAGES.length)];
 
             const activeUsers = await User.find({
@@ -400,21 +438,32 @@ class SchedulerService {
     /**
      * Initialize all scheduled jobs
      */
-    init() {
+    async init() {
+        // Fetch current settings for timezone
+        let settings;
+        try {
+            settings = await GymSettings.findOne();
+        } catch (error) {
+            logger.warn('Could not fetch gym settings for scheduler init, using default timezone');
+        }
+
+        const currentTz = settings?.timezone || TIMEZONE;
+        logger.info(`📅 Initializing Scheduler with timezone: ${currentTz}`);
+
         // 🌅 Morning Motivational Greetings - Daily at 6:00 AM
         cron.schedule('0 6 * * *', async () => {
             logger.info('⏰ Running scheduled morning greetings...');
             await this.sendMorningGreetings();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
-        // ⏰ Workout Time Reminders - Every hour during gym hours (5 AM - 8 PM)
-        cron.schedule('0 5-19 * * *', async () => {
+        // ⏰ Workout Time Reminders - Every hour (Internal logic filters by gym hours)
+        cron.schedule('0 * * * *', async () => {
             logger.info('⏰ Running scheduled workout reminders...');
             await this.sendWorkoutReminders();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
         // ⚠️ Expiry warnings - Daily at 9:00 AM
@@ -422,7 +471,7 @@ class SchedulerService {
             logger.info('⏰ Running scheduled expiry warnings...');
             await this.sendExpiryWarnings();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
         // 🌆 Evening Reminders for those who haven't visited - Daily at 4:00 PM
@@ -430,7 +479,7 @@ class SchedulerService {
             logger.info('⏰ Running scheduled evening reminders...');
             await this.sendEveningReminders();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
         // 💪 Inactivity reminders - Daily at 6:00 PM
@@ -438,7 +487,7 @@ class SchedulerService {
             logger.info('⏰ Running scheduled inactivity reminders...');
             await this.sendInactivityReminders();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
         // 🕛 Auto-expiration - Daily at 12:01 AM
@@ -446,7 +495,7 @@ class SchedulerService {
             logger.info('⏰ Running scheduled auto-expiration...');
             await this.expireMemberships();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
         // 📊 Weekly Progress Summary - Every Sunday at 10:00 AM
@@ -454,7 +503,7 @@ class SchedulerService {
             logger.info('⏰ Running weekly progress summaries...');
             await this.sendWeeklyProgress();
         }, {
-            timezone: TIMEZONE
+            timezone: currentTz
         });
 
         logger.info('📅 Scheduler service initialized with AUTO NOTIFICATIONS');

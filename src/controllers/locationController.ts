@@ -109,6 +109,12 @@ export const createLocation = async (req: AuthRequest, res: Response) => {
             success: true,
             data: location
         });
+
+        // 📍 BROADCAST TO ALL CLIENTS
+        const notificationService = require('../utils/notificationService').default;
+        notificationService.sendAdminNotification('location_created', { location });
+        notificationService.sendBroadcastNotification('location_created', { location });
+        notificationService.sendAdminNotification('stats_updated', { type: 'system' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -136,6 +142,12 @@ export const updateLocation = async (req: AuthRequest, res: Response) => {
             success: true,
             data: location
         });
+
+        // 📍 BROADCAST TO ALL CLIENTS
+        const notificationService = require('../utils/notificationService').default;
+        notificationService.sendAdminNotification('location_updated', { location });
+        notificationService.sendBroadcastNotification('location_updated', { location });
+        notificationService.sendAdminNotification('stats_updated', { type: 'system' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -161,6 +173,12 @@ export const deleteLocation = async (req: AuthRequest, res: Response) => {
             success: true,
             data: {}
         });
+
+        // 📍 BROADCAST TO ALL CLIENTS
+        const notificationService = require('../utils/notificationService').default;
+        notificationService.sendAdminNotification('location_deleted', { id: req.params.id });
+        notificationService.sendBroadcastNotification('location_deleted', { id: req.params.id });
+        notificationService.sendAdminNotification('stats_updated', { type: 'system' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

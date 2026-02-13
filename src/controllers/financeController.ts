@@ -333,4 +333,49 @@ export const addTransaction = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+/**
+ * @desc    Export transactions to CSV
+ * @route   GET /api/finance/export
+ * @access  Private (Admin only)
+ */
+export const exportTransactions = async (req: AuthRequest, res: Response) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
 
+        const { category, startDate, endDate } = req.query;
+        const query: any = {};
+
+        if (category) query.category = category;
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate as string);
+            if (endDate) query.date.$lte = new Date(endDate as string);
+        }
+
+        const transactions = await Transaction.find(query)
+            .populate('userId', 'firstName lastName')
+            .sort({ date: -1 });
+
+        // Generate CSV content
+        let csv = 'Date,Client/Type,Category,Type,Plan,Amount,Method,Description\n';
+
+        transactions.forEach((t: any) => {
+            const date = moment(t.date).tz(TIMEZONE).format('YYYY-MM-DD HH:mm');
+            const client = t.userId ? `${t.userId.firstName} ${t.userId.lastName}` : 'General';
+            const description = t.description ? t.description.replace(/,/g, ';') : '';
+
+            csv += `${date},${client},${t.category},${t.type},${t.plan || 'N/A'},${t.amount},${t.method},${description}\n`;
+        });
+
+        const filename = `financial_report_${moment().format('YYYY-MM-DD')}.csv`;
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+        res.status(200).send(csv);
+
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

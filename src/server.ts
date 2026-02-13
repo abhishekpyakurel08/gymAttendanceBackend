@@ -139,9 +139,12 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
     try {
         await connectDB();
-        httpServer.listen(PORT, () => {
+        httpServer.listen(PORT, async () => {
             logger.info(`✅ Server running on port ${PORT}`);
             logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+
+            // Initialize Scheduler for automation
+            await schedulerService.init();
         });
     } catch (error) {
         logger.error('❌ Failed to start server:', error);

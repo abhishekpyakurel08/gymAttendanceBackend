@@ -1,5 +1,5 @@
 import express from 'express';
-import { getTransactions, addTransaction, getDailyStats, getMonthlyStats, getWeeklyStats } from '../controllers/financeController';
+import { getTransactions, addTransaction, getDailyStats, getMonthlyStats, getWeeklyStats, exportTransactions } from '../controllers/financeController';
 import { protect, authorize } from '../middleware/auth';
 
 const router = express.Router();
@@ -9,6 +9,7 @@ router.use(protect);
 router.use(authorize('admin', 'manager', 'reception'));
 
 router.get('/transactions', getTransactions);
+router.get('/export', exportTransactions);
 router.get('/stats/daily', getDailyStats);
 router.get('/stats/weekly', getWeeklyStats);
 router.get('/stats/monthly', getMonthlyStats);
