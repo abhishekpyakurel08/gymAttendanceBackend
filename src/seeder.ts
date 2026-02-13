@@ -64,7 +64,7 @@ const seedUsers = async () => {
                 password: 'password123',
                 firstName: 'John',
                 lastName: 'Doe',
-                department: 'Engineering',
+                department: 'Operations',
                 role: 'user',
                 isActive: true,
                 profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${userEmail}`,
@@ -118,8 +118,8 @@ const seedUsers = async () => {
         });
         console.log('✅ Trainer Manager created: trainer@gmail.com / password123');
 
-        // 6. Create Receptionist (Manager)
-        const recEmail = 'receptionist@gmail.com';
+        // 6. Create Receptionist (Specific Reception Role)
+        const recEmail = 'reception@gmail.com';
         const recEmpId = 'REC-001';
         await User.deleteOne({ $or: [{ email: recEmail }, { employeeId: recEmpId }] });
         await User.create({
@@ -128,13 +128,14 @@ const seedUsers = async () => {
             password: 'password123',
             firstName: 'Rita',
             lastName: 'Reception',
-            department: 'Operations',
-            role: 'manager',
+            department: 'Reception',
+            role: 'reception',
             isActive: true,
             profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${recEmail}`,
-            shift: 'morning'
+            shift: 'morning',
+            salary: 15000
         });
-        console.log('✅ Receptionist created: receptionist@gmail.com / password123');
+        console.log('✅ Receptionist created: reception@gmail.com / password123');
 
         // 7. Create Member A - 3 month active
         const memberAEmail = 'memberA@gmail.com';
@@ -196,7 +197,7 @@ const seedUsers = async () => {
             password: 'password123',
             firstName: 'Prashant',
             lastName: 'Wait',
-            department: 'Engineering',
+            department: 'Operations',
             role: 'user',
             isActive: true,
             profileImage: `https://api.dicebear.com/9.x/avataaars/png?seed=${pendingEmail}`,

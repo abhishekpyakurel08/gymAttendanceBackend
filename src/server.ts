@@ -17,6 +17,7 @@ import attendanceRoutes from './routes/attendanceRoutes';
 import financeRoutes from './routes/financeRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import adminRoutes from './routes/adminRoutes';
+import staffNoteRoutes from './routes/staffNoteRoutes';
 import staffRoutes from './routes/staffRoutes';
 import reportRoutes from './routes/reportRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
@@ -32,6 +33,7 @@ dotenv.config();
 
 // Initialize express app
 const app: Application = express();
+app.set('trust proxy', 1);
 const httpServer = createServer(app);
 
 // Initialize Socket.io
@@ -57,7 +59,7 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
+    max: 1000, // Increased from 100 to 1000
     message: 'Too many requests from this IP, please try again after 15 minutes',
     standardHeaders: true,
     legacyHeaders: false,
@@ -82,6 +84,7 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/staff-notes', staffNoteRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/gym-settings', gymSettingsRoutes);
