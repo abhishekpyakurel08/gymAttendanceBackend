@@ -660,6 +660,16 @@ export const adminClockIn = async (req: AuthRequest, res: Response) => {
             message: 'User checked in successfully'
         });
 
+        // 🟢 REAL-TIME MONITOR FOR ADMIN
+        notificationService.sendAdminNotification('user_clock_in', {
+            attendanceId: attendance._id,
+            userId: user._id,
+            userName: `${user.firstName} ${user.lastName}`,
+            profileImage: user.profileImage,
+            time: now.format('HH:mm:ss'),
+            status: status
+        });
+
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -717,6 +727,13 @@ export const adminClockOut = async (req: AuthRequest, res: Response) => {
             success: true,
             data: attendance,
             message: 'User checked out successfully'
+        });
+
+        // 🔴 REAL-TIME MONITOR FOR ADMIN
+        notificationService.sendAdminNotification('user_clock_out', {
+            attendanceId: attendance._id,
+            userId: userId,
+            time: now.format('HH:mm:ss'),
         });
 
     } catch (error: any) {
@@ -789,6 +806,11 @@ export const deleteAttendance = async (req: AuthRequest, res: Response) => {
         await Attendance.findByIdAndDelete(req.params.id);
 
         res.status(200).json({ success: true, message: 'Attendance record deleted' });
+
+        // 🔄 REAL-TIME NOTIFY
+        notificationService.sendAdminNotification('attendance_deleted', {
+            attendanceId: req.params.id
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

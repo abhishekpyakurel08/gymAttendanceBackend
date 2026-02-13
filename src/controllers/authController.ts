@@ -162,6 +162,13 @@ export const register = async (req: Request, res: Response) => {
                 token
             }
         });
+
+        // 🔄 BROADCAST TO DASHBOARDS
+        notificationService.sendAdminNotification('new_member_registered', {
+            userId: user._id,
+            userName: `${user.firstName} ${user.lastName}`,
+            role: user.role
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -562,6 +569,13 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
                     data: { userId: user._id, type: 'membership_request' }
                 });
             }
+            // 🔄 BROADCAST TO DASHBOARDS
+            notificationService.sendAdminNotification('membership_request', {
+                userId: user._id,
+                userName: `${user.firstName} ${user.lastName}`,
+                plan: plan
+            });
+            notificationService.sendAdminNotification('stats_updated', { type: 'membership' });
         } catch (notifyError) {
             console.error('Failed to notify admins:', notifyError);
         }
@@ -609,6 +623,14 @@ export const approveMembership = async (req: AuthRequest, res: Response) => {
             message: 'Membership approved',
             data: user.membership
         });
+
+        // 🟢 BROADCAST TO DASHBOARDS
+        notificationService.sendAdminNotification('membership_approved', {
+            userId: user._id,
+            userName: `${user.firstName} ${user.lastName}`,
+            plan: user.membership.plan
+        });
+        notificationService.sendAdminNotification('stats_updated', { type: 'membership' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

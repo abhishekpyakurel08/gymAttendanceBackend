@@ -319,6 +319,16 @@ export const addTransaction = async (req: AuthRequest, res: Response) => {
             success: true,
             data: transaction
         });
+
+        // 💰 BROADCAST TO DASHBOARDS
+        const notificationService = require('../utils/notificationService').default;
+        notificationService.sendAdminNotification('transaction_added', {
+            transactionId: transaction._id,
+            category: transaction.category,
+            amount: transaction.amount,
+            type: transaction.type
+        });
+        notificationService.sendAdminNotification('stats_updated', { type: 'finance' });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

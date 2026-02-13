@@ -21,10 +21,10 @@ class NotificationService {
                 this.userSockets.set(userId, sockets);
                 logger.info(`User ${userId} connected for notifications (Socket: ${socket.id})`);
 
-                // If user is admin/manager, join them to the 'admin' room
-                if (userRole === 'admin' || userRole === 'manager') {
+                // If user is admin/manager/reception, join them to the 'admin' room
+                if (userRole === 'admin' || userRole === 'manager' || userRole === 'reception') {
                     socket.join('admin');
-                    logger.info(`Admin ${userId} joined the real-time monitor room`);
+                    logger.info(`${userRole.charAt(0).toUpperCase() + userRole.slice(1)} ${userId} joined the real-time monitor room`);
                 }
 
                 socket.on('disconnect', () => {
