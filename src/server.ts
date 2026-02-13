@@ -21,6 +21,9 @@ import staffRoutes from './routes/staffRoutes';
 import reportRoutes from './routes/reportRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import gymSettingsRoutes from './routes/gymSettingsRoutes';
+import locationRoutes from './routes/locationRoutes';
+import userRoutes from './routes/userRoutes';
+import path from 'path';
 
 import schedulerService from './utils/schedulerService';
 
@@ -82,6 +85,9 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/gym-settings', gymSettingsRoutes);
+app.use('/api/locations', locationRoutes);
+app.use('/api/user', userRoutes);
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check route
 import mongoose from 'mongoose';

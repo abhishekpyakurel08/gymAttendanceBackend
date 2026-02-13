@@ -77,12 +77,40 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     return R * c; // Distance in meters
 }
 
+import Location from '../models/Location';
+
+// ... (existing imports)
+
+// ... (existing constants)
+
 /**
- * Validate if coordinates are within gym geo-fence
+ * Validate if coordinates are within ANY active gym geo-fence
+ * Returns details about validation
  */
-function isWithinGymBoundary(latitude: number, longitude: number): boolean {
-    const distance = calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude);
-    return distance <= GYM_RADIUS_METERS;
+async function validateGeofence(latitude: number, longitude: number): Promise<{ isValid: boolean, message?: string, distance?: number }> {
+    const locations = await Location.find({ isActive: true });
+
+    // Fallback to hardcoded if no locations in DB
+    if (locations.length === 0) {
+        const dist = calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude);
+        if (dist <= GYM_RADIUS_METERS) return { isValid: true };
+        return { isValid: false, distance: Math.round(dist), message: `You are ${Math.round(dist)}m away from the gym.` };
+    }
+
+    let minDistance = Infinity;
+    let isValid = false;
+
+    for (const loc of locations) {
+        const dist = calculateDistance(loc.latitude, loc.longitude, latitude, longitude);
+        if (dist < minDistance) minDistance = dist;
+        if (dist <= loc.radius) {
+            isValid = true;
+            break;
+        }
+    }
+
+    if (isValid) return { isValid: true };
+    return { isValid: false, distance: Math.round(minDistance), message: `You are ${Math.round(minDistance)}m away from the nearest gym location.` };
 }
 
 // @desc    Clock in
@@ -99,12 +127,12 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        // 🔒 GEO-FENCE VALIDATION
-        if (!isWithinGymBoundary(latitude, longitude)) {
-            const distance = Math.round(calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude));
+        // 🔒 GEO-FENCE VALIDATION (Dynamic)
+        const geofence = await validateGeofence(latitude, longitude);
+        if (!geofence.isValid) {
             return res.status(403).json({
                 success: false,
-                message: `You must be at the gym to check in. You are ${distance}m away from gym location.`
+                message: geofence.message || `You must be at the gym to check in.`
             });
         }
 
@@ -296,12 +324,14 @@ export const clockOut = async (req: AuthRequest, res: Response) => {
         }
 
         // 🔒 GEO-FENCE VALIDATION (Clock-out must also be at gym)
-        if (latitude && longitude && !isWithinGymBoundary(latitude, longitude)) {
-            const distance = Math.round(calculateDistance(GYM_LATITUDE, GYM_LONGITUDE, latitude, longitude));
-            return res.status(403).json({
-                success: false,
-                message: `You must be at the gym to check out. You are ${distance}m away from gym location.`
-            });
+        if (latitude && longitude) {
+            const geofence = await validateGeofence(latitude, longitude);
+            if (!geofence.isValid) {
+                return res.status(403).json({
+                    success: false,
+                    message: geofence.message || `You must be at the gym to check out.`
+                });
+            }
         }
 
         // Update with clock out info

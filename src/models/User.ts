@@ -31,6 +31,7 @@ export interface IUser extends Document {
     paymentFrequency?: 'monthly' | 'bimonthly' | 'weekly';
     preferredWorkoutStart?: string; // e.g. "18:30"
     preferredWorkoutEnd?: string;   // e.g. "20:00"
+    lastLoginAt?: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -145,6 +146,9 @@ const UserSchema = new Schema<IUser>({
     preferredWorkoutEnd: {
         type: String,
         default: '08:00'
+    },
+    lastLoginAt: {
+        type: Date
     }
 }, {
     timestamps: true

@@ -217,83 +217,76 @@ export const login = async (req: Request, res: Response) => {
             role: user.role
         });
 
-        // 🕐 TIME-BASED GREETING NOTIFICATION
+        // 🕐 TIME-BASED GREETING NOTIFICATION (Once per day)
         try {
             const loginTime = moment().tz('Asia/Kathmandu');
-            const hour = loginTime.hour();
-            let greeting = '';
-            let emoji = '';
-            let motivationalMsg = '';
+            const startOfToday = loginTime.clone().startOf('day');
+            const lastLogin = user.lastLoginAt ? moment(user.lastLoginAt).tz('Asia/Kathmandu') : null;
+            const isFirstLoginToday = !lastLogin || lastLogin.isBefore(startOfToday);
 
-            if (hour < 6) {
-                greeting = 'Early Bird Alert! 🌙';
-                emoji = '🌙';
-                motivationalMsg = 'You\'re up before the sun! That\'s serious dedication. Let\'s make today count! 💪';
-            } else if (hour < 10) {
-                greeting = 'Good Morning! ☀️';
-                emoji = '☀️';
-                motivationalMsg = 'Rise and grind! Morning workouts set the tone for a winning day. Let\'s go! 🔥';
-            } else if (hour < 12) {
-                greeting = 'Late Morning Check-in! 🌤️';
-                emoji = '🌤️';
-                motivationalMsg = 'Better late than never! Your body will thank you. Let\'s crush it! 💪';
-            } else if (hour < 14) {
-                greeting = 'Afternoon Power! 🌞';
-                emoji = '🌞';
-                motivationalMsg = 'Lunch break workout? That\'s next level commitment! Keep pushing! 🏋️';
-            } else if (hour < 17) {
-                greeting = 'Afternoon Hustle! 💪';
-                emoji = '💪';
-                motivationalMsg = 'The afternoon session is all about focus and power. You\'ve got this! 🔥';
-            } else if (hour < 20) {
-                greeting = 'Evening Warriors! 🌆';
-                emoji = '🌆';
-                motivationalMsg = 'Evening workouts = stress relief + gains. The perfect combo! 💥';
-            } else {
-                greeting = 'Night Owl Mode! 🦉';
-                emoji = '🦉';
-                motivationalMsg = 'Late night grind! Respect the hustle. Make every rep count! 🏋️‍♂️';
-            }
+            if (isFirstLoginToday) {
+                const hour = loginTime.hour();
+                let greeting = '';
+                let motivationalMsg = '';
 
-            // Membership status info for the greeting
-            let membershipInfo = '';
-            if (user.membership?.expiryDate) {
-                const daysLeft = moment(user.membership.expiryDate).diff(loginTime, 'days');
-                if (daysLeft <= 3 && daysLeft >= 0) {
-                    membershipInfo = ` ⚠️ Your membership expires in ${daysLeft} day(s)!`;
+                if (hour < 6) {
+                    greeting = 'Early Bird Alert! 🌙';
+                    motivationalMsg = 'You\'re up before the sun! That\'s serious dedication. Let\'s make today count! 💪';
+                } else if (hour < 10) {
+                    greeting = 'Good Morning! ☀️';
+                    motivationalMsg = 'Rise and grind! Morning workouts set the tone for a winning day. Let\'s go! 🔥';
+                } else if (hour < 12) {
+                    greeting = 'Late Morning Check-in! 🌤️';
+                    motivationalMsg = 'Better late than never! Your body will thank you. Let\'s crush it! 💪';
+                } else if (hour < 14) {
+                    greeting = 'Afternoon Power! 🌞';
+                    motivationalMsg = 'Lunch break workout? That\'s next level commitment! Keep pushing! 🏋️';
+                } else if (hour < 17) {
+                    greeting = 'Afternoon Hustle! 💪';
+                    motivationalMsg = 'The afternoon session is all about focus and power. You\'ve got this! 🔥';
+                } else if (hour < 20) {
+                    greeting = 'Evening Warriors! 🌆';
+                    motivationalMsg = 'Evening workouts = stress relief + gains. The perfect combo! 💥';
+                } else {
+                    greeting = 'Night Owl Mode! 🦉';
+                    motivationalMsg = 'Late night grind! Respect the hustle. Make every rep count! 🏋️‍♂️';
+                }
+
+                let membershipInfo = '';
+                if (user.membership?.expiryDate) {
+                    const daysLeft = moment(user.membership.expiryDate).diff(loginTime, 'days');
+                    if (daysLeft <= 3 && daysLeft >= 0) {
+                        membershipInfo = ` ⚠️ Your membership expires in ${daysLeft} day(s)!`;
+                    }
+                }
+
+                // Send personalized greeting to the logged-in member
+                notificationService.sendNotification({
+                    recipientId: user._id.toString(),
+                    type: 'daily_greeting',
+                    title: `${greeting}`,
+                    message: `${motivationalMsg}${membershipInfo}`,
+                    data: { type: 'daily_greeting' }
+                }).catch(() => { });
+
+                // 🔔 ADMIN LOGIN ALERT: Only notify admins on first login of the day
+                const admins = await User.find({ role: { $in: ['admin', 'manager'] }, isActive: true });
+                for (const admin of admins) {
+                    notificationService.sendNotification({
+                        recipientId: admin._id.toString(),
+                        type: 'login_alert',
+                        title: '🔑 Member Login Alert',
+                        message: `${user.firstName} ${user.lastName} (${user.employeeId}) logged in for the first time today.`,
+                        data: {
+                            type: 'login_alert',
+                            userId: user._id,
+                            memberName: `${user.firstName} ${user.lastName}`
+                        }
+                    }).catch(() => { });
                 }
             }
 
-            // Send personalized greeting to the logged-in member
-            notificationService.sendNotification({
-                recipientId: user._id.toString(),
-                type: 'daily_greeting',
-                title: `${greeting}`,
-                message: `${motivationalMsg}${membershipInfo}`,
-                data: { type: 'daily_greeting', loginTime: loginTime.format('hh:mm A'), period: hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening' }
-            }).catch(() => { });
-
-            // 🔔 ADMIN LOGIN ALERT: Notify all admins when a member logs in
-            const admins = await User.find({ role: { $in: ['admin', 'manager'] }, isActive: true });
-            for (const admin of admins) {
-                notificationService.sendNotification({
-                    recipientId: admin._id.toString(),
-                    type: 'login_alert',
-                    title: '🔑 Member Login Alert',
-                    message: `${user.firstName} ${user.lastName} (${user.employeeId}) logged in at ${loginTime.format('hh:mm A')}. Membership: ${user.membership?.plan || 'none'} (${user.membership?.status || 'N/A'})`,
-                    data: {
-                        type: 'login_alert',
-                        userId: user._id,
-                        memberName: `${user.firstName} ${user.lastName}`,
-                        employeeId: user.employeeId,
-                        loginTime: loginTime.format('YYYY-MM-DD HH:mm:ss'),
-                        membershipPlan: user.membership?.plan,
-                        membershipStatus: user.membership?.status
-                    }
-                }).catch(() => { });
-            }
-
-            // Real-time admin dashboard event
+            // Always send real-time admin dashboard event (no data store, just broadcast)
             notificationService.sendAdminNotification('member_login', {
                 userId: user._id,
                 userName: `${user.firstName} ${user.lastName}`,
@@ -302,7 +295,13 @@ export const login = async (req: Request, res: Response) => {
                 loginTime: loginTime.format('HH:mm:ss'),
                 membershipStatus: user.membership?.status
             });
-        } catch (e) { }
+
+            // Update last login timestamp
+            user.lastLoginAt = new Date();
+            await user.save();
+        } catch (e) {
+            console.error('Login notification error:', e);
+        }
 
         res.status(200).json({
             success: true,

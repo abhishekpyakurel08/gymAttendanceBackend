@@ -211,6 +211,19 @@ const seedUsers = async () => {
         });
         console.log('✅ Pending member created: pending@gmail.com / password123');
 
+        // 10. Create Default Location (Shankhamul Gym)
+        const Location = require('./models/Location').default;
+        await Location.deleteMany({});
+        await Location.create({
+            name: 'Shankhamul Gym',
+            address: 'Shankhamul, Kathmandu',
+            latitude: 27.684185017430245,
+            longitude: 85.33338702577204,
+            radius: 100,
+            isActive: true
+        });
+        console.log('✅ Default Location seeded: Shankhamul Gym');
+
         process.exit(0);
     } catch (error) {
         console.error('❌ Seeding failed:', error);
