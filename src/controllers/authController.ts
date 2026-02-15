@@ -52,7 +52,7 @@ export const register = async (req: Request, res: Response) => {
             } else {
                 // Subscription plans
                 switch (requestedPlan) {
-                    case '1-month': expiry.add(1, 'month'); break;
+                    case '1-month': expiry.add(26, 'days'); break;
                     case '3-month': expiry.add(3, 'months'); break;
                     case '6-month': expiry.add(6, 'months'); break;
                     case '1-year': expiry.add(1, 'year'); break;
@@ -199,6 +199,24 @@ export const login = async (req: Request, res: Response) => {
 
         if (!isPasswordMatch) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+
+        // 🚀 FIRST LOGIN: ACTIVATE MEMBERSHIP & RESET DATES
+        if (!user.lastLoginAt && user.membership && user.membership.plan !== 'none') {
+            const now = moment().tz('Asia/Kathmandu');
+            user.membership.startDate = now.toDate();
+
+            let expiry = now.clone();
+            switch (user.membership.plan) {
+                case '1-month': expiry.add(26, 'days'); break;
+                case '3-month': expiry.add(3, 'months'); break;
+                case '6-month': expiry.add(6, 'months'); break;
+                case '1-year': expiry.add(1, 'year'); break;
+                default: expiry.add(1, 'month');
+            }
+            user.membership.expiryDate = expiry.toDate();
+            user.membership.status = 'active';
+            await user.save();
         }
 
         // Gym-pass validity check
@@ -541,7 +559,7 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
 
         let expiry = moment(start);
         switch (plan) {
-            case '1-month': expiry = expiry.add(1, 'month'); break;
+            case '1-month': expiry = expiry.add(26, 'days'); break;
             case '3-month': expiry = expiry.add(3, 'months'); break;
             case '6-month': expiry = expiry.add(6, 'months'); break;
             case '1-year': expiry = expiry.add(1, 'year'); break;
