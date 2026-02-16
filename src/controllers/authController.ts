@@ -53,9 +53,10 @@ export const register = async (req: Request, res: Response) => {
                 // Subscription plans
                 switch (requestedPlan) {
                     case '1-month': expiry.add(26, 'days'); break;
-                    case '3-month': expiry.add(3, 'months'); break;
-                    case '6-month': expiry.add(6, 'months'); break;
-                    case '1-year': expiry.add(1, 'year'); break;
+                    case '3-month': expiry.add(78, 'days'); break;
+                    case '6-month': expiry.add(156, 'days'); break;
+                    case '1-year': expiry.add(312, 'days'); break;
+                    default: expiry.add(26, 'days');
                 }
                 membership = {
                     plan: requestedPlan,
@@ -209,10 +210,10 @@ export const login = async (req: Request, res: Response) => {
             let expiry = now.clone();
             switch (user.membership.plan) {
                 case '1-month': expiry.add(26, 'days'); break;
-                case '3-month': expiry.add(3, 'months'); break;
-                case '6-month': expiry.add(6, 'months'); break;
-                case '1-year': expiry.add(1, 'year'); break;
-                default: expiry.add(1, 'month');
+                case '3-month': expiry.add(78, 'days'); break;
+                case '6-month': expiry.add(156, 'days'); break;
+                case '1-year': expiry.add(312, 'days'); break;
+                default: expiry.add(26, 'days');
             }
             user.membership.expiryDate = expiry.toDate();
             user.membership.status = 'active';
@@ -559,10 +560,11 @@ export const updateMembership = async (req: AuthRequest, res: Response) => {
 
         let expiry = moment(start);
         switch (plan) {
-            case '1-month': expiry = expiry.add(26, 'days'); break;
-            case '3-month': expiry = expiry.add(3, 'months'); break;
-            case '6-month': expiry = expiry.add(6, 'months'); break;
-            case '1-year': expiry = expiry.add(1, 'year'); break;
+            case '1-month': expiry.add(26, 'days'); break; // 26 days logic
+            case '3-month': expiry.add(78, 'days'); break;
+            case '6-month': expiry.add(156, 'days'); break;
+            case '1-year': expiry.add(312, 'days'); break;
+            default: expiry.add(26, 'days');
         }
 
         user.membership = {

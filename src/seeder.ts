@@ -71,7 +71,7 @@ const seedUsers = async () => {
                 membership: {
                     plan: '1-month',
                     startDate: new Date(),
-                    expiryDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+                    expiryDate: new Date(Date.now() + 26 * 24 * 60 * 60 * 1000), // 26 days
                     status: 'active',
                     monthlyDayCount: 5, // Simulated attendance
                     lastResetDate: new Date()
@@ -154,7 +154,7 @@ const seedUsers = async () => {
             membership: {
                 plan: '3-month',
                 startDate: new Date(),
-                expiryDate: new Date(new Date().setMonth(new Date().getMonth() + 3)),
+                expiryDate: new Date(Date.now() + 78 * 24 * 60 * 60 * 1000), // 78 days
                 status: 'active',
                 monthlyDayCount: 0,
                 lastResetDate: new Date()
@@ -179,7 +179,7 @@ const seedUsers = async () => {
             membership: {
                 plan: '1-month',
                 startDate: new Date(new Date().setMonth(new Date().getMonth() - 2)),
-                expiryDate: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+                expiryDate: new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000 + 26 * 24 * 60 * 60 * 1000), // Start -30 days, plus 26 days = -4 days (Expired)
                 status: 'expired',
                 monthlyDayCount: 0,
                 lastResetDate: new Date()

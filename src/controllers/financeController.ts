@@ -281,11 +281,11 @@ export const addTransaction = async (req: AuthRequest, res: Response) => {
 
                     let expiry = start.clone();
                     switch (plan) {
-                        case '1-month': expiry.add(1, 'month'); break;
-                        case '3-month': expiry.add(3, 'months'); break;
-                        case '6-month': expiry.add(6, 'months'); break;
-                        case '1-year': expiry.add(1, 'year'); break;
-                        default: expiry.add(1, 'month');
+                        case '1-month': expiry.add(26, 'days'); break;
+                        case '3-month': expiry.add(78, 'days'); break;
+                        case '6-month': expiry.add(156, 'days'); break;
+                        case '1-year': expiry.add(312, 'days'); break;
+                        default: expiry.add(26, 'days');
                     }
 
                     user.membership = {
@@ -375,6 +375,116 @@ export const exportTransactions = async (req: AuthRequest, res: Response) => {
         res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
         res.status(200).send(csv);
 
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+/**
+ * @desc    Get financial stats with dynamic range
+ * @route   GET /api/finance/stats?range=7d
+ * @access  Private (Admin/Manager/Reception)
+ */
+export const getFinancialStats = async (req: AuthRequest, res: Response) => {
+    try {
+        const { range = '7d' } = req.query;
+        let startDate: Date;
+        let groupBy: any;
+        let format: string;
+        let unit: 'days' | 'months' = 'days';
+        let count: number;
+
+        const now = moment().tz(TIMEZONE);
+
+        switch (range) {
+            case '7d':
+                startDate = now.clone().subtract(6, 'days').startOf('day').toDate();
+                groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$date" } };
+                format = 'YYYY-MM-DD';
+                count = 7;
+                unit = 'days';
+                break;
+            case '1m':
+                startDate = now.clone().subtract(29, 'days').startOf('day').toDate();
+                groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$date" } };
+                format = 'YYYY-MM-DD';
+                count = 30;
+                unit = 'days';
+                break;
+            case '3m':
+                startDate = now.clone().subtract(3, 'months').startOf('month').toDate();
+                groupBy = { $dateToString: { format: "%Y-%m", date: "$date" } };
+                format = 'YYYY-MM';
+                count = 4; // Current + 3 previous
+                unit = 'months';
+                break;
+            case '6m':
+                startDate = now.clone().subtract(6, 'months').startOf('month').toDate();
+                groupBy = { $dateToString: { format: "%Y-%m", date: "$date" } };
+                format = 'YYYY-MM';
+                count = 7;
+                unit = 'months';
+                break;
+            case '1y':
+                startDate = now.clone().subtract(12, 'months').startOf('month').toDate();
+                groupBy = { $dateToString: { format: "%Y-%m", date: "$date" } };
+                format = 'YYYY-MM';
+                count = 13;
+                unit = 'months';
+                break;
+            default:
+                startDate = now.clone().subtract(6, 'days').startOf('day').toDate();
+                groupBy = { $dateToString: { format: "%Y-%m-%d", date: "$date" } };
+                format = 'YYYY-MM-DD';
+                count = 7;
+                unit = 'days';
+        }
+
+        const stats = await Transaction.aggregate([
+            {
+                $match: {
+                    date: { $gte: startDate, $lte: now.toDate() }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        date: groupBy,
+                        category: '$category'
+                    },
+                    amount: { $sum: '$amount' }
+                }
+            },
+            { $sort: { '_id.date': 1 } }
+        ]);
+
+        const chartData: any[] = [];
+        const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        for (let i = count - 1; i >= 0; i--) {
+            const m = now.clone().subtract(i, unit);
+            const dateStr = m.format(format);
+            const label = unit === 'days' ? dayLabels[m.day()] : m.format('MMM');
+
+            chartData.push({
+                name: label,
+                date: dateStr,
+                income: 0,
+                expense: 0
+            });
+        }
+
+        stats.forEach(stat => {
+            const dataPoint = chartData.find(d => d.date === stat._id.date);
+            if (dataPoint) {
+                if (stat._id.category === 'income') dataPoint.income = stat.amount;
+                else dataPoint.expense = stat.amount;
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: chartData
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }

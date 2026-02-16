@@ -506,6 +506,15 @@ class SchedulerService {
             timezone: currentTz
         });
 
+        // 🧟 Auto Clock-out Zombie Sessions - Every hour at minute 5
+        // This handles cases where users leave without clocking out and app is closed
+        cron.schedule('5 * * * *', async () => {
+            logger.info('⏰ Running scheduled auto clock-out for zombie sessions...');
+            await this.autoClockOutZombieSessions();
+        }, {
+            timezone: currentTz
+        });
+
         logger.info('📅 Scheduler service initialized with AUTO NOTIFICATIONS');
         logger.info('  - 🌅 Morning greetings:    Daily at 6:00 AM');
         logger.info('  - ⏰ Workout reminders:    Every hour (5AM-7PM)');
@@ -514,6 +523,58 @@ class SchedulerService {
         logger.info('  - 💪 Inactivity reminders: Daily at 6:00 PM');
         logger.info('  - 🕛 Auto Expiration:      Daily at 12:01 AM');
         logger.info('  - 📊 Weekly Progress:      Sunday at 10:00 AM');
+        logger.info('  - 🧟 Zombie Clock-out:     Every hour at :05');
+    }
+
+    /**
+     * Finds and clocks out any user who has been clocked in for more than 4 hours
+     * but hasn't clocked out yet. This ensures "Live Presence" remains accurate.
+     */
+    async autoClockOutZombieSessions() {
+        try {
+            const settings = await GymSettings.findOne();
+            const currentTz = settings?.timezone || TIMEZONE;
+            const now = moment().tz(currentTz);
+
+            // Sessions older than 4 hours are considered zombie sessions
+            const cutoff = now.clone().subtract(4, 'hours').toDate();
+
+            const zombieSessions = await Attendance.find({
+                clockOut: { $exists: false },
+                clockIn: { $lt: cutoff }
+            }).populate('userId');
+
+            if (zombieSessions.length === 0) return;
+
+            logger.info(`🔍 Found ${zombieSessions.length} zombie sessions to auto clock-out.`);
+
+            for (const session of zombieSessions) {
+                // Set clock-out to 4 hours after clock-in (or whichever came first)
+                const autoClockOutTime = moment(session.clockIn).add(4, 'hours').toDate();
+                session.clockOut = autoClockOutTime;
+
+                // Add a note or flag if needed, but for now just save
+                await session.save();
+
+                const user = session.userId as any;
+                if (user) {
+                    await notificationService.sendNotification({
+                        recipientId: user._id.toString(),
+                        type: 'system',
+                        title: '⏰ Auto Clock-Out',
+                        message: `Your gym session was automatically ended after 4 hours of inactivity.`,
+                        data: { type: 'auto_clock_out', attendanceId: session._id }
+                    });
+                }
+            }
+
+            // Notify admins that cleanup happened
+            notificationService.sendAdminNotification('stats_updated', { type: 'attendance' });
+
+            logger.info(`✅ Successfully auto clocked-out ${zombieSessions.length} zombie sessions.`);
+        } catch (error: any) {
+            logger.error('Error in autoClockOutZombieSessions:', error.message);
+        }
     }
 }
 

@@ -300,6 +300,10 @@ export const clockIn = async (req: AuthRequest, res: Response) => {
             status: status
         });
 
+        // Update user's last activity
+        user.lastActivity = now.toDate();
+        await user.save();
+
         res.status(201).json({
             success: true,
             data: attendance,
@@ -379,6 +383,9 @@ export const clockOut = async (req: AuthRequest, res: Response) => {
             userId: req.user.id,
             time: now.format('HH:mm:ss'),
         });
+
+        // Update user's last activity
+        await User.findByIdAndUpdate(req.user.id, { lastActivity: now.toDate() });
 
         res.status(200).json({
             success: true,
@@ -474,6 +481,11 @@ export const getStats = async (req: AuthRequest, res: Response) => {
             if (endDate) matchQuery.date.$lte = new Date(endDate as string);
         }
 
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
         const stats = await Attendance.aggregate([
             { $match: matchQuery },
             {
@@ -495,10 +507,27 @@ export const getStats = async (req: AuthRequest, res: Response) => {
             formattedStats[stat._id as keyof typeof formattedStats] = stat.count;
         });
 
-        const total = await Attendance.countDocuments(matchQuery);
+        // --- DYNAMIC ABSENT CALCULATION ---
+        const creationDate = moment(user.createdAt).tz(TIMEZONE).startOf('day');
+        const calcStart = startDate ? moment(new Date(startDate as string)).tz(TIMEZONE).startOf('day') : creationDate;
+        const calcEnd = endDate ? moment(new Date(endDate as string)).tz(TIMEZONE).startOf('day') : moment().tz(TIMEZONE).startOf('day');
 
-        // Sum of on-time, late, and half-day for total present
+        // Ensure calcStart is not before creationDate
+        const actualStart = moment.max(creationDate, calcStart);
+
+        let workingDays = 0;
+        const current = actualStart.clone();
+
+        while (current.isSameOrBefore(calcEnd)) {
+            // Saturday is 6 in moment (0 is Sunday, 6 is Saturday)
+            if (current.day() !== 6) {
+                workingDays++;
+            }
+            current.add(1, 'day');
+        }
+
         const totalPresent = formattedStats['on-time'] + formattedStats['late'] + formattedStats['half-day'];
+        const totalAbsent = Math.max(0, workingDays - totalPresent);
 
         res.status(200).json({
             success: true,
@@ -506,8 +535,8 @@ export const getStats = async (req: AuthRequest, res: Response) => {
                 totalPresent,
                 totalOnTime: formattedStats['on-time'],
                 totalLate: formattedStats['late'],
-                totalAbsent: formattedStats['absent'],
-                totalRecords: total
+                totalAbsent: totalAbsent,
+                totalRecords: workingDays
             }
         });
     } catch (error: any) {

@@ -32,6 +32,7 @@ export interface IUser extends Document {
     preferredWorkoutStart?: string; // e.g. "18:30"
     preferredWorkoutEnd?: string;   // e.g. "20:00"
     lastLoginAt?: Date;
+    lastActivity?: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -148,6 +149,9 @@ const UserSchema = new Schema<IUser>({
         default: '08:00'
     },
     lastLoginAt: {
+        type: Date
+    },
+    lastActivity: {
         type: Date
     }
 }, {
